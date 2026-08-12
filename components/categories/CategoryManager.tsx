@@ -16,7 +16,8 @@ import {
   AlertCircle,
   Eye,
   ArrowDown,
-  ArrowUp
+  ArrowUp,
+  Loader2
 } from 'lucide-react'
 import { supabase } from '@/lib/supabase'
 
@@ -54,6 +55,8 @@ export function CategoryManager({
     color: '#3B82F6',
     keywords: ''
   })
+  const [isAdding, setIsAdding] = useState(false)
+  const [addError, setAddError] = useState<string | null>(null)
 
   // View Transactions Modal State
   const [viewModal, setViewModal] = useState<{
@@ -78,77 +81,76 @@ export function CategoryManager({
     loadCategories()
   }, [])
 
+  const loadCategories = async () => {
+    try {
+      setLoading(true)
+      setError(null)
 
-const loadCategories = async () => {
-  try {
-    setLoading(true)
-    setError(null)
-
-    const { data: { session } } = await supabase.auth.getSession()
-    
-    if (!session) {
-      setError('Please sign in to view categories')
-      setLoading(false)
-      return
-    }
-
-    // Fetch categories from API
-    const response = await fetch('/api/categories', {
-      headers: {
-        'Authorization': `Bearer ${session.access_token}`,
-      },
-    })
-
-    if (!response.ok) {
-      const errorData = await response.json()
-      throw new Error(errorData.error || 'Failed to fetch categories')
-    }
-
-    const data = await response.json()
-    const dbCategories = data.categories || []
-
-    // Get transaction counts per category
-    const { data: transactions, error: txError } = await supabase
-      .from('transactions')
-      .select('category, amount')
-      .eq('user_id', session.user.id)
-
-    if (txError) {
-      console.error('❌ Transactions error:', txError)
-      throw txError
-    }
-
-    // Calculate stats per category
-    const categoryStats: Record<string, { count: number; total: number }> = {}
-    transactions?.forEach((t: any) => {
-      if (t.category) {
-        if (!categoryStats[t.category]) {
-          categoryStats[t.category] = { count: 0, total: 0 }
-        }
-        categoryStats[t.category].count += 1
-        categoryStats[t.category].total += t.amount
+      const { data: { session } } = await supabase.auth.getSession()
+      
+      if (!session) {
+        setError('Please sign in to view categories')
+        setLoading(false)
+        return
       }
-    })
 
-    // Map to categories - the API already handles deduplication
-    const mappedCategories = dbCategories?.map((cat: any) => ({
-      id: cat.id,
-      name: cat.name,
-      color: cat.color || '#6B7280',
-      transactionCount: categoryStats[cat.name]?.count || 0,
-      totalAmount: categoryStats[cat.name]?.total || 0,
-      rules: cat.keywords || [],
-      is_system: cat.is_system || false,
-    })) || []
+      // Fetch categories from API
+      const response = await fetch('/api/categories', {
+        headers: {
+          'Authorization': `Bearer ${session.access_token}`,
+        },
+      })
 
-    setCategories(mappedCategories)
-  } catch (error: any) {
-    console.error('❌ Error loading categories:', error)
-    setError(error.message || 'Failed to load categories')
-  } finally {
-    setLoading(false)
+      if (!response.ok) {
+        const errorData = await response.json()
+        throw new Error(errorData.error || 'Failed to fetch categories')
+      }
+
+      const data = await response.json()
+      const dbCategories = data.categories || []
+
+      // Get transaction counts per category
+      const { data: transactions, error: txError } = await supabase
+        .from('transactions')
+        .select('category, amount')
+        .eq('user_id', session.user.id)
+
+      if (txError) {
+        console.error('❌ Transactions error:', txError)
+        throw txError
+      }
+
+      // Calculate stats per category
+      const categoryStats: Record<string, { count: number; total: number }> = {}
+      transactions?.forEach((t: any) => {
+        if (t.category) {
+          if (!categoryStats[t.category]) {
+            categoryStats[t.category] = { count: 0, total: 0 }
+          }
+          categoryStats[t.category].count += 1
+          categoryStats[t.category].total += t.amount
+        }
+      })
+
+      // Map to categories - the API already handles deduplication
+      const mappedCategories = dbCategories?.map((cat: any) => ({
+        id: cat.id,
+        name: cat.name,
+        color: cat.color || '#6B7280',
+        transactionCount: categoryStats[cat.name]?.count || 0,
+        totalAmount: categoryStats[cat.name]?.total || 0,
+        rules: cat.keywords || [],
+        is_system: cat.is_system || false,
+      })) || []
+
+      setCategories(mappedCategories)
+    } catch (error: any) {
+      console.error('❌ Error loading categories:', error)
+      setError(error.message || 'Failed to load categories')
+    } finally {
+      setLoading(false)
+    }
   }
-}
 
   const filteredCategories = categories.filter(cat =>
     cat.name.toLowerCase().includes(searchTerm.toLowerCase())
@@ -235,15 +237,30 @@ const loadCategories = async () => {
   }
 
   const handleAddCategory = async () => {
-    if (!newCategory.name.trim()) {
-      alert('Please enter a category name')
+    // Validate name
+    const trimmedName = newCategory.name.trim()
+    if (!trimmedName) {
+      setAddError('Please enter a category name')
       return
     }
+
+    // Check for duplicate category name (case insensitive)
+    const existingCategory = categories.find(
+      cat => cat.name.toLowerCase() === trimmedName.toLowerCase()
+    )
+    if (existingCategory) {
+      setAddError(`Category "${trimmedName}" already exists. Please use a different name.`)
+      return
+    }
+
+    setIsAdding(true)
+    setAddError(null)
 
     try {
       const { data: { session } } = await supabase.auth.getSession()
       if (!session) {
-        alert('Please sign in to add categories')
+        setAddError('Please sign in to add categories')
+        setIsAdding(false)
         return
       }
 
@@ -256,18 +273,25 @@ const loadCategories = async () => {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
-          name: newCategory.name.trim(),
+          name: trimmedName,
           color: newCategory.color,
           keywords: keywords,
         }),
       })
 
+      const data = await response.json()
+
       if (!response.ok) {
-        const errorData = await response.json()
-        throw new Error(errorData.error || 'Failed to create category')
+        // Check if it's a duplicate error from the API
+        if (data.already_exists || data.error?.includes('already exists')) {
+          setAddError(`Category "${trimmedName}" already exists. Please use a different name.`)
+        } else {
+          setAddError(data.error || 'Failed to create category')
+        }
+        setIsAdding(false)
+        return
       }
 
-      const data = await response.json()
       const newCat = data.category
 
       if (newCat) {
@@ -287,11 +311,14 @@ const loadCategories = async () => {
 
       setNewCategory({ name: '', color: '#3B82F6', keywords: '' })
       setLocalShowModal(false)
+      setAddError(null)
       if (onCloseModal) onCloseModal()
       if (onCategoryUpdated) onCategoryUpdated()
     } catch (error: any) {
       console.error('Error adding category:', error)
-      alert('Failed to add category: ' + error.message)
+      setAddError(error.message || 'Failed to create category')
+    } finally {
+      setIsAdding(false)
     }
   }
 
@@ -528,7 +555,6 @@ const loadCategories = async () => {
                 </div>
 
                 <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-              
                   <button
                     onClick={() => handleDelete(category.id, category.name)}
                     className="p-1.5 text-gray-400 hover:text-rose-500 rounded-md hover:bg-white transition-colors"
@@ -561,19 +587,33 @@ const loadCategories = async () => {
             </div>
 
             <div className="space-y-4">
+              {/* Category Name */}
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Category Name
+                  Category Name <span className="text-rose-500">*</span>
                 </label>
                 <input
                   type="text"
                   placeholder="e.g., Groceries"
                   value={newCategory.name}
-                  onChange={(e) => setNewCategory({ ...newCategory, name: e.target.value })}
-                  className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-electric-blue/20 focus:border-electric-blue"
+                  onChange={(e) => {
+                    setNewCategory({ ...newCategory, name: e.target.value })
+                    if (addError) setAddError(null)
+                  }}
+                  className={`w-full px-3 py-2 border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-electric-blue/20 ${
+                    addError ? 'border-rose-500 focus:border-rose-500' : 'border-gray-200 focus:border-electric-blue'
+                  }`}
+                  disabled={isAdding}
                 />
+                {addError && (
+                  <p className="mt-1 text-sm text-rose-600 flex items-center gap-1">
+                    <AlertCircle className="w-3.5 h-3.5" />
+                    {addError}
+                  </p>
+                )}
               </div>
 
+              {/* Color */}
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">
                   Color
@@ -589,11 +629,13 @@ const loadCategories = async () => {
                           : 'border-transparent hover:border-gray-400'
                       }`}
                       style={{ backgroundColor: color }}
+                      disabled={isAdding}
                     />
                   ))}
                 </div>
               </div>
 
+              {/* Keywords */}
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">
                   Keywords (comma separated)
@@ -604,6 +646,7 @@ const loadCategories = async () => {
                   value={newCategory.keywords}
                   onChange={(e) => setNewCategory({ ...newCategory, keywords: e.target.value })}
                   className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-electric-blue/20 focus:border-electric-blue"
+                  disabled={isAdding}
                 />
                 <p className="text-xs text-gray-400 mt-1">
                   These keywords will help auto-categorize transactions
@@ -615,17 +658,27 @@ const loadCategories = async () => {
               <button
                 onClick={() => {
                   setLocalShowModal(false)
+                  setAddError(null)
                   if (onCloseModal) onCloseModal()
                 }}
                 className="flex-1 px-4 py-2 border border-gray-200 text-gray-600 rounded-lg hover:bg-gray-50 transition-colors"
+                disabled={isAdding}
               >
                 Cancel
               </button>
               <button
                 onClick={handleAddCategory}
-                className="flex-1 px-4 py-2 bg-navy text-white rounded-lg hover:bg-navy/90 transition-colors"
+                disabled={isAdding}
+                className="flex-1 px-4 py-2 bg-navy text-white rounded-lg hover:bg-navy/90 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
               >
-                Add Category
+                {isAdding ? (
+                  <>
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                    Adding...
+                  </>
+                ) : (
+                  'Add Category'
+                )}
               </button>
             </div>
           </div>
