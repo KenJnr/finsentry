@@ -2,20 +2,24 @@
 
 'use client'
 
-import { useState } from 'react'
-import { useRouter } from 'next/navigation'
+import { useState, useEffect } from 'react'
+import { useRouter, useSearchParams } from 'next/navigation'
 import Link from 'next/link'
 import { supabase } from '@/lib/supabase'
 import { Mail, Lock, ArrowRight, Upload, FileText, TrendingUp, Users, Wallet } from 'lucide-react'
 
 export default function Login() {
   const router = useRouter()
+  const searchParams = useSearchParams()
+  const redirectTo = searchParams.get('redirectTo') || '/dashboard'
+  
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
   const [formData, setFormData] = useState({
     email: '',
     password: '',
   })
+  const [resending, setResending] = useState(false)
 
   const features = [
     { icon: Upload, text: 'Upload a bank or mobile-money statement' },
@@ -23,6 +27,25 @@ export default function Login() {
     { icon: TrendingUp, text: 'Clear totals by merchant, category & week' },
     { icon: Wallet, text: 'MTN MoMo statements - in GHC' },
   ]
+
+  // Check for verification success message
+  useEffect(() => {
+    const message = searchParams.get('message')
+    if (message === 'verified') {
+      setError('')
+      // Show success message
+      const successDiv = document.createElement('div')
+      successDiv.className = 'bg-emerald-50 border border-emerald-200 rounded-lg p-3 mb-4 animate-fade-in'
+      successDiv.innerHTML = '<p class="text-sm text-emerald-600">✅ Email verified! Please sign in.</p>'
+      const errorContainer = document.querySelector('.error-container')
+      if (errorContainer) {
+        errorContainer.parentNode?.insertBefore(successDiv, errorContainer)
+        setTimeout(() => {
+          successDiv.remove()
+        }, 5000)
+      }
+    }
+  }, [searchParams])
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     setFormData({ ...formData, [e.target.name]: e.target.value })
@@ -35,7 +58,7 @@ export default function Login() {
     setError('')
 
     try {
-      const { error } = await supabase.auth.signInWithPassword({
+      const { data, error } = await supabase.auth.signInWithPassword({
         email: formData.email,
         password: formData.password,
       })
@@ -43,18 +66,59 @@ export default function Login() {
       if (error) {
         if (error.message.includes('Invalid login credentials')) {
           setError('Invalid email or password. Please try again.')
+        } else if (error.message.includes('Email not confirmed')) {
+          setError('Please verify your email before signing in. Check your inbox for the verification link.')
         } else {
           setError(error.message)
         }
         throw error
       }
 
-      router.push('/dashboard')
-      router.refresh()
+      if (data.session) {
+        // Clean up the URL by removing the redirectTo parameter
+        const newUrl = new URL(window.location.href)
+        newUrl.searchParams.delete('redirectTo')
+        window.history.replaceState({}, '', newUrl.toString())
+
+        // Redirect to the original destination or dashboard
+        router.push(redirectTo)
+        router.refresh()
+      }
     } catch (error: any) {
       console.error('Login error:', error)
     } finally {
       setLoading(false)
+    }
+  }
+
+  const handleResendVerification = async () => {
+    if (!formData.email) {
+      setError('Please enter your email first')
+      return
+    }
+
+    setResending(true)
+    setError('')
+
+    try {
+      const { error } = await supabase.auth.resend({
+        type: 'signup',
+        email: formData.email,
+        options: {
+          emailRedirectTo: `${window.location.origin}/auth/callback`,
+        },
+      })
+
+      if (error) throw error
+
+      setError('')
+      // Show success message
+      alert('Verification email resent! Please check your inbox.')
+    } catch (error: any) {
+      console.error('Resend error:', error)
+      setError(error.message || 'Failed to resend verification email')
+    } finally {
+      setResending(false)
     }
   }
 
@@ -77,14 +141,12 @@ export default function Login() {
     <div className="min-h-screen flex items-stretch bg-gradient-to-br from-slate-50 to-blue-50/30">
       {/* Left Panel - Features */}
       <div className="hidden lg:flex lg:w-1/2 bg-gradient-to-br from-blue-600 via-blue-700 to-indigo-800 p-12 flex-col justify-between relative overflow-hidden">
-        {/* Decorative elements */}
         <div className="absolute top-0 right-0 w-64 h-64 bg-white/5 rounded-full -translate-y-1/2 translate-x-1/2"></div>
         <div className="absolute bottom-0 left-0 w-96 h-96 bg-white/5 rounded-full translate-y-1/2 -translate-x-1/2"></div>
         <div className="absolute top-1/2 left-1/2 w-48 h-48 bg-white/5 rounded-full -translate-y-1/2 -translate-x-1/2"></div>
         
         <div className="relative z-10">
           <div className="flex items-center gap-3 mb-12">
-           
             <span className="text-2xl font-bold text-orange-400">FinSentry</span>
           </div>
           
@@ -118,7 +180,6 @@ export default function Login() {
         <div className="w-full max-w-md">
           {/* Mobile Logo */}
           <div className="lg:hidden text-center mb-8">
-            
             <h1 className="text-2xl font-bold text-orange-400">FinSentry</h1>
             <p className="text-sm text-gray-500 mt-1">Sign in to see your spending</p>
           </div>
@@ -129,11 +190,23 @@ export default function Login() {
             <h2 className="text-xl font-semibold text-navy mt-1">See exactly where your Cedis went.</h2>
           </div>
 
-          {error && (
-            <div className="bg-rose-50 border border-rose-200 rounded-lg p-3 mb-4 animate-fade-in">
-              <p className="text-sm text-rose-600">{error}</p>
-            </div>
-          )}
+          {/* Error Container */}
+          <div className="error-container">
+            {error && (
+              <div className="bg-rose-50 border border-rose-200 rounded-lg p-3 mb-4 animate-fade-in">
+                <p className="text-sm text-rose-600">{error}</p>
+                {error.includes('verify your email') && (
+                  <button
+                    onClick={handleResendVerification}
+                    disabled={resending}
+                    className="mt-2 text-sm text-blue-600 hover:underline font-medium disabled:opacity-50"
+                  >
+                    {resending ? 'Sending...' : 'Resend verification email'}
+                  </button>
+                )}
+              </div>
+            )}
+          </div>
 
           {/* Google Button */}
           <button

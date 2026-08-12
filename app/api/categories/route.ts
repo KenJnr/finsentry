@@ -15,38 +15,169 @@ const supabaseAdmin = createClient(
 )
 
 // ============================================================
-// GET: Fetch user's categories
+// GET: Fetch system categories + user's custom categories
 // ============================================================
 export async function GET(req: NextRequest) {
   try {
     const authHeader = req.headers.get('authorization')
+
     if (!authHeader || !authHeader.startsWith('Bearer ')) {
-      return NextResponse.json({ error: 'Missing authorization' }, { status: 401 })
+      return NextResponse.json(
+        { error: 'Missing authorization' },
+        { status: 401 }
+      )
     }
 
     const token = authHeader.replace('Bearer ', '')
-    const { data: { user }, error: userError } = await supabaseAdmin.auth.getUser(token)
+
+    const {
+      data: { user },
+      error: userError,
+    } = await supabaseAdmin.auth.getUser(token)
 
     if (userError || !user) {
-      return NextResponse.json({ error: 'Invalid token' }, { status: 401 })
+      console.error('Authentication error:', userError)
+      return NextResponse.json(
+        { error: 'Invalid token' },
+        { status: 401 }
+      )
     }
 
-    // Get user's categories + system defaults
-    const { data: categories, error } = await supabaseAdmin
+    console.log('👤 Loading categories for:', user.id)
+
+    // ============================================================
+    // 1. FETCH ALL SYSTEM CATEGORIES
+    //    System category = user_id IS NULL
+    // ============================================================
+    const {
+      data: systemCategories,
+      error: systemError,
+    } = await supabaseAdmin
       .from('categories')
       .select('*')
-      .or(`user_id.eq.${user.id},user_id.is.null`)
-      .order('name')
+      .is('user_id', null)
+      .order('name', { ascending: true })
 
-    if (error) {
-      console.error('Error fetching categories:', error)
-      return NextResponse.json({ error: 'Failed to fetch categories' }, { status: 500 })
+    if (systemError) {
+      console.error('❌ System categories error:', systemError)
+
+      return NextResponse.json(
+        {
+          error: 'Failed to fetch system categories',
+          details: systemError.message,
+        },
+        { status: 500 }
+      )
     }
 
-    return NextResponse.json({ categories })
+    // ============================================================
+    // 2. FETCH USER'S CUSTOM CATEGORIES
+    // ============================================================
+    const {
+      data: userCategories,
+      error: userCategoriesError,
+    } = await supabaseAdmin
+      .from('categories')
+      .select('*')
+      .eq('user_id', user.id)
+      .order('name', { ascending: true })
+
+    if (userCategoriesError) {
+      console.error(
+        '❌ User categories error:',
+        userCategoriesError
+      )
+
+      return NextResponse.json(
+        {
+          error: 'Failed to fetch user categories',
+          details: userCategoriesError.message,
+        },
+        { status: 500 }
+      )
+    }
+
+    console.log(
+      `📊 System categories found: ${systemCategories?.length ?? 0}`
+    )
+
+    console.log(
+      `👤 User categories found: ${userCategories?.length ?? 0}`
+    )
+
+    console.log(
+      '🏷️ System category names:',
+      systemCategories?.map(c => c.name)
+    )
+
+    console.log(
+      '🏷️ User category names:',
+      userCategories?.map(c => c.name)
+    )
+
+    // ============================================================
+    // 3. MERGE CATEGORIES
+    //
+    // System categories are included for everyone.
+    //
+    // If the user created a category with the same name as a
+    // system category, the user's version overrides it.
+    // ============================================================
+    const categoryMap = new Map<string, any>()
+
+    // Add system categories first
+    for (const category of systemCategories ?? []) {
+      categoryMap.set(category.name.toLowerCase(), {
+        ...category,
+        is_system: true,
+      })
+    }
+
+    // Add user's categories second
+    // User categories override system categories with same name
+    for (const category of userCategories ?? []) {
+      categoryMap.set(category.name.toLowerCase(), {
+        ...category,
+        is_system: false,
+      })
+    }
+
+    const mergedCategories = Array.from(categoryMap.values()).sort(
+      (a, b) => a.name.localeCompare(b.name)
+    )
+
+    console.log(
+      `✅ Returning ${mergedCategories.length} categories`
+    )
+
+    console.log(
+      '📋 Final categories:',
+      mergedCategories.map(c => ({
+        name: c.name,
+        is_system: c.is_system,
+        user_id: c.user_id,
+      }))
+    )
+
+    return NextResponse.json({
+      categories: mergedCategories,
+
+      // Useful for debugging / frontend
+      counts: {
+        system: systemCategories?.length ?? 0,
+        user: userCategories?.length ?? 0,
+        total: mergedCategories.length,
+      },
+    })
   } catch (error) {
-    console.error('Categories GET error:', error)
-    return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
+    console.error('❌ Categories GET error:', error)
+
+    return NextResponse.json(
+      {
+        error: 'Internal server error',
+      },
+      { status: 500 }
+    )
   }
 }
 
@@ -74,7 +205,7 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Category name is required' }, { status: 400 })
     }
 
-    // Check if category already exists for this user
+    // Check if user already has a custom category with this name
     const { data: existing, error: checkError } = await supabaseAdmin
       .from('categories')
       .select('id')
@@ -83,9 +214,18 @@ export async function POST(req: NextRequest) {
       .maybeSingle()
 
     if (existing) {
-      return NextResponse.json({ error: 'Category already exists' }, { status: 409 })
+      return NextResponse.json({ error: 'You already have a category with this name' }, { status: 409 })
     }
 
+    // Check if this is a system category (user can override it)
+    const { data: systemCategory } = await supabaseAdmin
+      .from('categories')
+      .select('id')
+      .eq('name', name)
+      .is('user_id', null)
+      .maybeSingle()
+
+    // If it's a system category, we'll create a user-specific override
     const { data: category, error } = await supabaseAdmin
       .from('categories')
       .insert({
@@ -103,7 +243,7 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Failed to create category' }, { status: 500 })
     }
 
-    return NextResponse.json({ category })
+    return NextResponse.json({ category, is_override: !!systemCategory })
   } catch (error) {
     console.error('Categories POST error:', error)
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 })

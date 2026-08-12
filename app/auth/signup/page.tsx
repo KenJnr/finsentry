@@ -2,7 +2,7 @@
 
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { supabase } from '@/lib/supabase'
@@ -12,7 +12,6 @@ export default function SignUp() {
   const router = useRouter()
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
-  const [success, setSuccess] = useState(false)
   const [formData, setFormData] = useState({
     email: '',
     password: '',
@@ -26,89 +25,146 @@ export default function SignUp() {
     { icon: Wallet, text: 'MTN MoMo statements - in GHC' },
   ]
 
+  // Check if already authenticated
+  useEffect(() => {
+  const checkAuth = async () => {
+    const {
+      data: { session },
+    } = await supabase.auth.getSession()
+
+    console.log(
+      '🧪 SIGNUP PAGE SESSION:',
+      session
+        ? {
+            id: session.user.id,
+            email: session.user.email,
+          }
+        : null
+    )
+
+    if (session) {
+      router.replace('/dashboard')
+    }
+  }
+
+  checkAuth()
+}, [router])
+
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     setFormData({ ...formData, [e.target.name]: e.target.value })
     if (error) setError('')
   }
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault()
-    setLoading(true)
-    setError('')
-    setSuccess(false)
+ const handleSubmit = async (e: React.FormEvent) => {
+  e.preventDefault()
 
-    if (!formData.fullName.trim()) {
-      setError('Please enter your full name')
-      setLoading(false)
-      return
-    }
+  if (loading) return
 
-    if (formData.password.length < 6) {
-      setError('Password must be at least 6 characters')
-      setLoading(false)
-      return
-    }
+  setLoading(true)
+  setError('')
 
-    try {
-      const { data, error } = await supabase.auth.signUp({
-        email: formData.email,
-        password: formData.password,
-        options: {
-          data: {
-            full_name: formData.fullName,
-          },
-          emailRedirectTo: `${window.location.origin}/auth/callback`,
+  if (!formData.fullName.trim()) {
+    setError('Please enter your full name')
+    setLoading(false)
+    return
+  }
+
+  if (formData.password.length < 6) {
+    setError('Password must be at least 6 characters')
+    setLoading(false)
+    return
+  }
+
+  try {
+    console.log('📝 Creating account...')
+
+    const {
+      data,
+      error: signUpError,
+    } = await supabase.auth.signUp({
+      email: formData.email.trim().toLowerCase(),
+      password: formData.password,
+      options: {
+        data: {
+          full_name: formData.fullName.trim(),
         },
-      })
+      },
+    })
 
-      if (error) {
-        if (error.message.includes('User already registered')) {
-          setError('This email is already registered. Please sign in instead.')
-        } else {
-          setError(error.message)
-        }
-        throw error
+    console.log('📝 Signup response:', {
+      user: data.user?.email,
+      userId: data.user?.id,
+      hasSession: !!data.session,
+      identities: data.user?.identities?.length,
+    })
+
+    if (signUpError) {
+      console.error('❌ Signup error:', signUpError)
+
+      if (
+        signUpError.message
+          .toLowerCase()
+          .includes('already registered')
+      ) {
+        setError(
+          'This email is already registered. Please sign in instead.'
+        )
+      } else {
+        setError(signUpError.message)
       }
 
-      if (data.user?.identities?.length === 0) {
-        setError('This email is already registered. Please sign in instead.')
-        setLoading(false)
-        return
-      }
-
-      setSuccess(true)
-      
-      setTimeout(() => {
-        router.push('/auth/verify-email')
-      }, 2000)
-      
-    } catch (error: any) {
-      console.error('Sign up error:', error)
-    } finally {
-      setLoading(false)
+      return
     }
-  }
 
-  if (success) {
-    return (
-      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-slate-50 to-blue-50/30 px-4">
-        <div className="bg-white rounded-xl shadow-card-dark p-8 max-w-md w-full text-center">
-          <div className="text-5xl mb-4">✅</div>
-          <h1 className="text-2xl font-bold text-emerald-600">Account Created!</h1>
-          <p className="text-sm text-gray-500 mt-2">
-            Redirecting you to verification page...
-          </p>
-          <div className="mt-4">
-            <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-blue-600 mx-auto"></div>
-          </div>
-        </div>
-      </div>
+    if (!data.user) {
+      setError('Account could not be created. Please try again.')
+      return
+    }
+
+    /*
+     * Confirm Email is disabled.
+     *
+     * Supabase should return a session immediately.
+     */
+    if (data.session) {
+      console.log('✅ Account created')
+      console.log('✅ Session created')
+      console.log('🚀 Redirecting to dashboard...')
+
+      router.replace('/dashboard')
+      router.refresh()
+
+      return
+    }
+
+    /*
+     * If we get here, Supabase did NOT return a session.
+     *
+     * This normally means Confirm Email is still enabled
+     * or another Auth setting is preventing automatic login.
+     */
+    console.warn(
+      '⚠️ User created but no session was returned.'
     )
+
+    setError(
+      'Account created, but automatic sign-in was not completed. Please check your Supabase email confirmation settings.'
+    )
+  } catch (error: any) {
+    console.error('❌ Sign up error:', error)
+
+    setError(
+      error?.message ||
+        'Something went wrong while creating your account.'
+    )
+  } finally {
+    setLoading(false)
   }
+}
 
   return (
     <div className="min-h-screen flex items-stretch bg-gradient-to-br from-slate-50 to-blue-50/30">
-      {/* Left Panel - Features */}
+      {/* Left Panel */}
       <div className="hidden lg:flex lg:w-1/2 bg-gradient-to-br from-blue-600 via-blue-700 to-indigo-800 p-12 flex-col justify-between relative overflow-hidden">
         <div className="absolute top-0 right-0 w-64 h-64 bg-white/5 rounded-full -translate-y-1/2 translate-x-1/2"></div>
         <div className="absolute bottom-0 left-0 w-96 h-96 bg-white/5 rounded-full translate-y-1/2 -translate-x-1/2"></div>
@@ -116,7 +172,6 @@ export default function SignUp() {
         
         <div className="relative z-10">
           <div className="flex items-center gap-3 mb-12">
-            
             <span className="text-2xl font-bold text-orange-400">FinSentry</span>
           </div>
           
@@ -145,12 +200,11 @@ export default function SignUp() {
         </div>
       </div>
 
-      {/* Right Panel - Signup Form */}
+      {/* Right Panel */}
       <div className="flex-1 flex items-center justify-center px-4 py-8 lg:px-8">
         <div className="w-full max-w-md">
           {/* Mobile Logo */}
           <div className="lg:hidden text-center mb-8">
-           
             <h1 className="text-2xl font-bold text-orange-400">FinSentry</h1>
             <p className="text-sm text-gray-500 mt-1">Create your account</p>
           </div>
@@ -186,7 +240,7 @@ export default function SignUp() {
                   name="fullName"
                   value={formData.fullName}
                   onChange={handleChange}
-                  placeholder="Kingsley Naab Boadi"
+                  placeholder="Your name"
                   className="w-full pl-10 pr-3 py-2.5 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all"
                   required
                   disabled={loading}

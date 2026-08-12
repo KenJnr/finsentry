@@ -15,7 +15,8 @@ import {
   RefreshCw,
   Eye,
   ArrowDown,
-  ArrowUp
+  ArrowUp,
+  Save
 } from 'lucide-react'
 import { supabase } from '@/lib/supabase'
 import { RecategorizeModal } from '@/components/transactions/RecategorizeModal'
@@ -46,6 +47,17 @@ export function CategoryRules() {
     merchant: '' 
   })
   const [editingId, setEditingId] = useState<string | null>(null)
+  const [editValues, setEditValues] = useState<{
+    category: string
+    keyword: string
+    matchType: string
+    merchant: string
+  }>({
+    category: '',
+    keyword: '',
+    matchType: 'contains',
+    merchant: ''
+  })
   const [searchTerm, setSearchTerm] = useState('')
   const [merchantList, setMerchantList] = useState<string[]>([])
   const [newMerchant, setNewMerchant] = useState('')
@@ -203,20 +215,37 @@ export function CategoryRules() {
     }
   }
 
-  const handleEdit = async (id: string, field: keyof Rule, value: string) => {
+  const startEditing = (rule: Rule) => {
+    setEditingId(rule.id)
+    setEditValues({
+      category: rule.category,
+      keyword: rule.keyword,
+      matchType: rule.matchType,
+      merchant: rule.merchant || ''
+    })
+  }
+
+  const cancelEditing = () => {
+    setEditingId(null)
+    setEditValues({
+      category: '',
+      keyword: '',
+      matchType: 'contains',
+      merchant: ''
+    })
+  }
+
+  const handleSaveEdit = async (id: string) => {
     try {
       const { data: { session } } = await supabase.auth.getSession()
       if (!session) return
 
-      const updateData: any = {}
-      if (field === 'category') {
-        updateData.category_name = value
-      } else if (field === 'keyword') {
-        updateData.keyword = value.toLowerCase()
-      } else if (field === 'matchType') {
-        updateData.match_type = value
-      } else if (field === 'merchant') {
-        updateData.merchant = value || null
+      const updateData: any = {
+        category_name: editValues.category,
+        keyword: editValues.keyword.toLowerCase(),
+        match_type: editValues.matchType,
+        merchant: editValues.merchant || null,
+        updated_at: new Date().toISOString()
       }
 
       const { error } = await supabase
@@ -228,13 +257,24 @@ export function CategoryRules() {
       if (error) throw error
 
       setRules(rules.map(r => 
-        r.id === id ? { ...r, [field]: value } : r
+        r.id === id ? { 
+          ...r, 
+          category: editValues.category,
+          keyword: editValues.keyword,
+          matchType: editValues.matchType as any,
+          merchant: editValues.merchant || ''
+        } : r
       ))
+
+      cancelEditing()
     } catch (error: any) {
       console.error('Error updating rule:', error)
       alert('Failed to update rule: ' + error.message)
     }
-    setEditingId(null)
+  }
+
+  const handleEditChange = (field: keyof typeof editValues, value: string) => {
+    setEditValues(prev => ({ ...prev, [field]: value }))
   }
 
   const addMerchant = () => {
@@ -392,8 +432,8 @@ export function CategoryRules() {
                     {editingId === rule.id ? (
                       <>
                         <select
-                          defaultValue={rule.category}
-                          onChange={(e) => handleEdit(rule.id, 'category', e.target.value)}
+                          value={editValues.category}
+                          onChange={(e) => handleEditChange('category', e.target.value)}
                           className="px-2 py-1 border border-electric-blue rounded-lg text-sm focus:outline-none"
                           autoFocus
                         >
@@ -402,8 +442,8 @@ export function CategoryRules() {
                           ))}
                         </select>
                         <select
-                          defaultValue={rule.matchType}
-                          onChange={(e) => handleEdit(rule.id, 'matchType', e.target.value)}
+                          value={editValues.matchType}
+                          onChange={(e) => handleEditChange('matchType', e.target.value)}
                           className="px-2 py-1 border border-electric-blue rounded-lg text-sm focus:outline-none"
                         >
                           <option value="contains">contains</option>
@@ -413,25 +453,15 @@ export function CategoryRules() {
                         <input
                           type="text"
                           placeholder="Keyword"
-                          defaultValue={rule.keyword}
-                          onBlur={(e) => handleEdit(rule.id, 'keyword', e.target.value)}
-                          onKeyDown={(e) => {
-                            if (e.key === 'Enter') {
-                              handleEdit(rule.id, 'keyword', (e.target as HTMLInputElement).value)
-                            }
-                          }}
+                          value={editValues.keyword}
+                          onChange={(e) => handleEditChange('keyword', e.target.value)}
                           className="px-2 py-1 border border-electric-blue rounded-lg text-sm focus:outline-none"
                         />
                         <input
                           type="text"
                           placeholder="Merchant (optional)"
-                          defaultValue={rule.merchant || ''}
-                          onBlur={(e) => handleEdit(rule.id, 'merchant', e.target.value)}
-                          onKeyDown={(e) => {
-                            if (e.key === 'Enter') {
-                              handleEdit(rule.id, 'merchant', (e.target as HTMLInputElement).value)
-                            }
-                          }}
+                          value={editValues.merchant}
+                          onChange={(e) => handleEditChange('merchant', e.target.value)}
                           className="px-2 py-1 border border-electric-blue rounded-lg text-sm focus:outline-none w-32"
                         />
                       </>
@@ -459,20 +489,41 @@ export function CategoryRules() {
                   </div>
 
                   <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                    <button
-                      onClick={() => setEditingId(rule.id)}
-                      className="p-1.5 text-gray-400 hover:text-electric-blue rounded-md hover:bg-white transition-colors"
-                      title="Edit"
-                    >
-                      <Edit2 className="w-3.5 h-3.5" />
-                    </button>
-                    <button
-                      onClick={() => handleDelete(rule.id)}
-                      className="p-1.5 text-gray-400 hover:text-rose-500 rounded-md hover:bg-white transition-colors"
-                      title="Delete"
-                    >
-                      <Trash2 className="w-3.5 h-3.5" />
-                    </button>
+                    {editingId === rule.id ? (
+                      <>
+                        <button
+                          onClick={() => handleSaveEdit(rule.id)}
+                          className="p-1.5 text-emerald-500 hover:text-emerald-700 rounded-md hover:bg-emerald-50 transition-colors"
+                          title="Save"
+                        >
+                          <Save className="w-3.5 h-3.5" />
+                        </button>
+                        <button
+                          onClick={cancelEditing}
+                          className="p-1.5 text-gray-400 hover:text-gray-600 rounded-md hover:bg-gray-100 transition-colors"
+                          title="Cancel"
+                        >
+                          <X className="w-3.5 h-3.5" />
+                        </button>
+                      </>
+                    ) : (
+                      <>
+                        <button
+                          onClick={() => startEditing(rule)}
+                          className="p-1.5 text-gray-400 hover:text-electric-blue rounded-md hover:bg-white transition-colors"
+                          title="Edit"
+                        >
+                          <Edit2 className="w-3.5 h-3.5" />
+                        </button>
+                        <button
+                          onClick={() => handleDelete(rule.id)}
+                          className="p-1.5 text-gray-400 hover:text-rose-500 rounded-md hover:bg-white transition-colors"
+                          title="Delete"
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </button>
+                      </>
+                    )}
                   </div>
                 </div>
               ))

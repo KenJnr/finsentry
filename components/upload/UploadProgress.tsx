@@ -1,15 +1,27 @@
 // components/upload/UploadProgress.tsx
+
 'use client'
 
-import { Loader2, CheckCircle, FileText } from 'lucide-react'
+import { useRouter } from 'next/navigation'
+import { Loader2, CheckCircle, FileText, Eye, List, Upload } from 'lucide-react'
 
 interface UploadProgressProps {
   progress: number
   status: 'uploading' | 'processing' | 'complete' | 'error' | 'idle'
   fileName?: string
+  transactionCount?: number
+  onUploadAnother?: () => void
 }
 
-export function UploadProgress({ progress, status, fileName }: UploadProgressProps) {
+export function UploadProgress({ 
+  progress, 
+  status, 
+  fileName, 
+  transactionCount = 0,
+  onUploadAnother 
+}: UploadProgressProps) {
+  const router = useRouter()
+  
   const isUploading = status === 'uploading'
   const isProcessing = status === 'processing'
   const isComplete = status === 'complete'
@@ -17,7 +29,7 @@ export function UploadProgress({ progress, status, fileName }: UploadProgressPro
 
   const getStatusText = () => {
     if (isUploading) return 'Uploading...'
-    if (isProcessing) return 'Processing statement...'
+    if (isProcessing) return 'Categorizing transactions...'
     if (isComplete) return 'Complete!'
     if (isError) return 'Error'
     return 'Ready'
@@ -29,6 +41,14 @@ export function UploadProgress({ progress, status, fileName }: UploadProgressPro
     if (isComplete) return 'text-emerald-500'
     if (isError) return 'text-rose-500'
     return 'text-gray-500'
+  }
+
+  const handleViewSummary = () => {
+    router.push('/insights?tab=summary')
+  }
+
+  const handleViewTransactions = () => {
+    router.push('/insights?tab=transactions')
   }
 
   return (
@@ -65,6 +85,60 @@ export function UploadProgress({ progress, status, fileName }: UploadProgressPro
           {progress}%
         </span>
       </div>
+
+      {/* Transaction Count (only when complete) */}
+      {isComplete && transactionCount > 0 && (
+        <div className="mt-4 pt-3 border-t border-gray-200">
+          <p className="text-sm text-gray-600">
+            <span className="font-semibold">{transactionCount}</span> transactions processed
+          </p>
+        </div>
+      )}
+
+      {/* Action Buttons (only when complete) */}
+      {isComplete && (
+        <div className="mt-4 pt-3 border-t border-gray-200">
+          <div className="flex flex-wrap gap-2">
+            <button
+              onClick={handleViewSummary}
+              className="inline-flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors text-sm font-medium"
+            >
+              <Eye className="w-4 h-4" />
+              View Summary
+            </button>
+            <button
+              onClick={handleViewTransactions}
+              className="inline-flex items-center gap-2 px-4 py-2 bg-navy text-white rounded-lg hover:bg-navy/90 transition-colors text-sm font-medium"
+            >
+              <List className="w-4 h-4" />
+              View Transactions
+            </button>
+            <button
+              onClick={onUploadAnother}
+              className="inline-flex items-center gap-2 px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors text-sm font-medium"
+            >
+              <Upload className="w-4 h-4" />
+              Upload Another
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* Error message */}
+      {isError && (
+        <div className="mt-4 pt-3 border-t border-gray-200">
+          <p className="text-sm text-rose-600">
+            Something went wrong. Please try again.
+          </p>
+          <button
+            onClick={onUploadAnother}
+            className="mt-2 inline-flex items-center gap-2 px-4 py-2 bg-rose-100 text-rose-700 rounded-lg hover:bg-rose-200 transition-colors text-sm font-medium"
+          >
+            <Upload className="w-4 h-4" />
+            Try Again
+          </button>
+        </div>
+      )}
     </div>
   )
 }

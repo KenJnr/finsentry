@@ -1,14 +1,14 @@
 // app/layout.tsx
+
 import type { Metadata } from 'next'
 import { Inter } from 'next/font/google'
 import './globals.css'
-import { AuthProvider } from '@/lib/auth-context'
 
 const inter = Inter({ subsets: ['latin'] })
 
 export const metadata: Metadata = {
-  title: 'Momo Analyzer',
-  description: 'Analyze your mobile money statements',
+  title: 'FinSentry - Mobile Money Analyzer',
+  description: 'Analyze your mobile money transactions with ease',
 }
 
 export default function RootLayout({
@@ -19,9 +19,7 @@ export default function RootLayout({
   return (
     <html lang="en">
       <body className={inter.className}>
-        <AuthProvider>
-          {children}
-        </AuthProvider>
+        {children}
       </body>
     </html>
   )

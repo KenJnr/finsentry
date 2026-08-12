@@ -1,60 +1,158 @@
-// app/auth/callback/page.tsx
 'use client'
 
 import { useEffect, useState } from 'react'
-import { useRouter } from 'next/navigation'
-import { supabase } from '@/lib/supabase'
+import { useRouter, useSearchParams } from 'next/navigation'
 import Link from 'next/link'
+import { supabase } from '@/lib/supabase'
 
 export default function AuthCallback() {
   const router = useRouter()
+  const searchParams = useSearchParams()
+
   const [error, setError] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
+  const [message, setMessage] = useState(
+    'Completing authentication...'
+  )
 
   useEffect(() => {
+    let mounted = true
+
     const handleCallback = async () => {
       try {
-        // Get the session after email verification
-        const { data: { session }, error: sessionError } = await supabase.auth.getSession()
-        
-        if (sessionError) throw sessionError
+        const code = searchParams.get('code')
+        const next = searchParams.get('next') || '/dashboard'
 
-        if (session) {
-          // User is verified and logged in, redirect to dashboard
-          router.push('/dashboard')
-          router.refresh()
-        } else {
-          // No session, check if it's a verification flow
-          const { data, error: exchangeError } = await supabase.auth.exchangeCodeForSession(
-            window.location.search
+        console.log('🔐 Auth callback')
+        console.log('Code:', !!code)
+        console.log('Next:', next)
+
+        /*
+         * OAuth / PKCE callback
+         */
+        if (code) {
+          setMessage('Completing sign in...')
+
+          const {
+            data,
+            error: exchangeError,
+          } = await supabase.auth.exchangeCodeForSession(
+            code
           )
-          
-          if (exchangeError) throw exchangeError
-          
+
+          if (exchangeError) {
+            console.error(
+              '❌ Code exchange error:',
+              exchangeError
+            )
+
+            if (mounted) {
+              setError(exchangeError.message)
+              setLoading(false)
+            }
+
+            return
+          }
+
           if (data.session) {
-            router.push('/dashboard')
-            router.refresh()
-          } else {
-            setError('Unable to verify your email. Please try again.')
+            console.log('✅ Session established')
+
+            if (mounted) {
+              setMessage('Authentication successful. Redirecting...')
+
+              setTimeout(() => {
+                router.replace(next)
+                router.refresh()
+              }, 300)
+            }
+
+            return
           }
         }
+
+        /*
+         * Check existing session.
+         */
+        const {
+          data: { user },
+          error: userError,
+        } = await supabase.auth.getUser()
+
+        if (userError) {
+          console.error(
+            '❌ User lookup error:',
+            userError
+          )
+
+          if (mounted) {
+            setError(userError.message)
+            setLoading(false)
+          }
+
+          return
+        }
+
+        if (user) {
+          console.log(
+            '✅ Existing authenticated user:',
+            user.email
+          )
+
+          if (mounted) {
+            setMessage('Already authenticated. Redirecting...')
+
+            setTimeout(() => {
+              router.replace(next)
+              router.refresh()
+            }, 300)
+          }
+
+          return
+        }
+
+        /*
+         * No code and no session.
+         */
+        if (mounted) {
+          setError(
+            'Authentication could not be completed. Please try signing in again.'
+          )
+
+          setLoading(false)
+        }
       } catch (err: any) {
-        console.error('Auth callback error:', err)
-        setError(err.message || 'Something went wrong during verification.')
-      } finally {
-        setLoading(false)
+        console.error(
+          '❌ Auth callback error:',
+          err
+        )
+
+        if (mounted) {
+          setError(
+            err?.message ||
+              'Something went wrong during authentication.'
+          )
+
+          setLoading(false)
+        }
       }
     }
 
     handleCallback()
-  }, [router])
+
+    return () => {
+      mounted = false
+    }
+  }, [router, searchParams])
 
   if (loading) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-gray-50">
         <div className="text-center">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-electric-blue mx-auto"></div>
-          <p className="mt-4 text-sm text-gray-500">Verifying your email...</p>
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-500 mx-auto" />
+
+          <p className="mt-4 text-sm text-gray-500">
+            {message}
+          </p>
         </div>
       </div>
     )
@@ -64,15 +162,36 @@ export default function AuthCallback() {
     return (
       <div className="min-h-screen flex items-center justify-center bg-gray-50 px-4">
         <div className="bg-white rounded-xl shadow-card-dark p-8 max-w-md w-full text-center">
-          <div className="text-5xl mb-4">❌</div>
-          <h1 className="text-2xl font-bold text-rose-600">Verification Failed</h1>
-          <p className="text-sm text-gray-500 mt-2">{error}</p>
-          <Link
-            href="/auth/login"
-            className="block mt-6 py-2.5 bg-electric-blue text-white rounded-lg hover:bg-electric-blue/90 transition-colors text-sm font-medium"
-          >
-            Back to Sign In
-          </Link>
+
+          <div className="text-5xl mb-4">
+            ❌
+          </div>
+
+          <h1 className="text-2xl font-bold text-rose-600">
+            Authentication Failed
+          </h1>
+
+          <p className="text-sm text-gray-500 mt-2">
+            {error}
+          </p>
+
+          <div className="mt-6 space-y-3">
+
+            <Link
+              href="/auth/login"
+              className="block w-full py-2.5 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors text-sm font-medium"
+            >
+              Back to Sign In
+            </Link>
+
+            <Link
+              href="/auth/signup"
+              className="block w-full py-2.5 border border-gray-200 text-gray-600 rounded-lg hover:bg-gray-50 transition-colors text-sm font-medium"
+            >
+              Create New Account
+            </Link>
+
+          </div>
         </div>
       </div>
     )

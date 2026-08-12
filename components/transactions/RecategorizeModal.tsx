@@ -3,7 +3,7 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { X, Sparkles } from 'lucide-react'
+import { X, Sparkles, Layers } from 'lucide-react'
 import { supabase } from '@/lib/supabase'
 
 interface RecategorizeModalProps {
@@ -31,16 +31,20 @@ export function RecategorizeModal({
   const [selectedCategory, setSelectedCategory] = useState('')
   const [loading, setLoading] = useState(false)
   const [saveAsRule, setSaveAsRule] = useState(true)
+  const [applyToAll, setApplyToAll] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [matchingTransactionsCount, setMatchingTransactionsCount] = useState(0)
 
   useEffect(() => {
-    if (isOpen) {
+    if (isOpen && transaction) {
       loadCategories()
+      loadMatchingTransactions()
       setSelectedCategory('')
       setError(null)
       setSaveAsRule(true)
+      setApplyToAll(false)
     }
-  }, [isOpen])
+  }, [isOpen, transaction])
 
   const loadCategories = async () => {
     try {
@@ -62,6 +66,32 @@ export function RecategorizeModal({
       setCategories(filtered)
     } catch (error) {
       console.error('Error loading categories:', error)
+    }
+  }
+
+  const loadMatchingTransactions = async () => {
+    if (!transaction) return
+
+    try {
+      const { data: { session } } = await supabase.auth.getSession()
+      if (!session) return
+
+      const keyword = transaction.reference || transaction.description || ''
+      if (!keyword) return
+
+      // Find all transactions with the same reference or description
+      const { data, error } = await supabase
+        .from('transactions')
+        .select('id, category')
+        .eq('user_id', session.user.id)
+        .or(`reference.eq.${keyword},description.eq.${keyword}`)
+        .neq('id', transaction.id) // Exclude the current transaction
+
+      if (error) throw error
+
+      setMatchingTransactionsCount(data?.length || 0)
+    } catch (error) {
+      console.error('Error loading matching transactions:', error)
     }
   }
 
@@ -87,41 +117,61 @@ export function RecategorizeModal({
       const category = categories.find(c => c.id === selectedCategory)
       if (!category) throw new Error('Category not found')
 
-      // Update the transaction
-      const { error: updateError } = await supabase
-        .from('transactions')
-        .update({
-          category: category.name,
-          is_manual: true,
-          original_category: transaction.category || 'Uncategorized',
-          updated_at: new Date().toISOString()
-        })
-        .eq('id', transaction.id)
-        .eq('user_id', session.user.id)
+      const keyword = transaction.reference || transaction.description || ''
 
-      if (updateError) throw updateError
+      if (applyToAll && keyword) {
+        // Apply to ALL transactions with the same reference/description
+        const { error: updateError } = await supabase
+          .from('transactions')
+          .update({
+            category: category.name,
+            is_manual: true,
+            original_category: transaction.category || 'Uncategorized',
+            updated_at: new Date().toISOString()
+          })
+          .eq('user_id', session.user.id)
+          .or(`reference.eq.${keyword},description.eq.${keyword}`)
+
+        if (updateError) throw updateError
+
+        console.log(`✅ Updated ${matchingTransactionsCount + 1} transactions to ${category.name}`)
+      } else {
+        // Update only the single transaction
+        const { error: updateError } = await supabase
+          .from('transactions')
+          .update({
+            category: category.name,
+            is_manual: true,
+            original_category: transaction.category || 'Uncategorized',
+            updated_at: new Date().toISOString()
+          })
+          .eq('id', transaction.id)
+          .eq('user_id', session.user.id)
+
+        if (updateError) throw updateError
+
+        console.log(`✅ Updated 1 transaction to ${category.name}`)
+      }
 
       // If saveAsRule is true, create a new rule
-      if (saveAsRule) {
-        const keyword = transaction.reference || transaction.description || ''
-        if (keyword) {
-          const { error: ruleError } = await supabase
-            .from('category_rules')
-            .upsert({
-              user_id: session.user.id,
-              category_id: category.id,
-              keyword: keyword.toLowerCase().trim(),
-              is_exact_match: true,
-              updated_at: new Date().toISOString()
-            }, {
-              onConflict: 'user_id,keyword'
-            })
+      if (saveAsRule && keyword) {
+        const { error: ruleError } = await supabase
+          .from('category_rules')
+          .upsert({
+            user_id: session.user.id,
+            category_id: category.id,
+            category_name: category.name,
+            keyword: keyword.toLowerCase().trim(),
+            match_type: 'contains',
+            updated_at: new Date().toISOString()
+          }, {
+            onConflict: 'user_id,keyword'
+          })
 
-          if (ruleError) {
-            console.error('Error creating rule:', ruleError)
-          } else {
-            console.log('✅ Rule created for:', keyword)
-          }
+        if (ruleError) {
+          console.error('Error creating rule:', ruleError)
+        } else {
+          console.log('✅ Rule created for:', keyword)
         }
       }
 
@@ -136,6 +186,8 @@ export function RecategorizeModal({
   }
 
   if (!isOpen || !transaction) return null
+
+  const hasMatchingTransactions = matchingTransactionsCount > 0
 
   return (
     <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4 animate-fade-in">
@@ -163,7 +215,7 @@ export function RecategorizeModal({
             </p>
             <div className="flex flex-wrap items-center gap-4 text-xs text-gray-500">
               <span>Amount: GH₵{transaction.amount?.toFixed(2) || '0.00'}</span>
-              <span>Type: {transaction.type === 'credit' ? '💰 Inflow' : '💸 Outflow'}</span>
+              <span>Type: {transaction.type === 'credit' ? '💰 Inflow' : 'Outflow'}</span>
               <span>Current: <span className="text-gray-700">{transaction.category || 'Uncategorized'}</span></span>
             </div>
             {transaction.date && (
@@ -172,6 +224,32 @@ export function RecategorizeModal({
               </div>
             )}
           </div>
+
+          {/* Apply to All Option */}
+          {hasMatchingTransactions && (
+            <div className="p-3 bg-blue-50 border border-blue-200 rounded-lg">
+              <label className="flex items-start gap-3 cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={applyToAll}
+                  onChange={(e) => setApplyToAll(e.target.checked)}
+                  className="w-4 h-4 text-electric-blue border-gray-300 rounded focus:ring-electric-blue mt-0.5"
+                />
+                <div>
+                  <div className="flex items-center gap-2">
+                    <Layers className="w-4 h-4 text-blue-500" />
+                    <span className="text-sm font-medium text-blue-700">
+                      Apply to all matching transactions
+                    </span>
+                  </div>
+                  <p className="text-xs text-blue-600 mt-0.5">
+                    This will update {matchingTransactionsCount + 1} transactions 
+                    with the same name/reference
+                  </p>
+                </div>
+              </label>
+            </div>
+          )}
 
           {/* Category Selection */}
           <div>
@@ -202,7 +280,7 @@ export function RecategorizeModal({
               className="w-4 h-4 text-electric-blue border-gray-300 rounded focus:ring-electric-blue"
             />
             <label htmlFor="saveAsRule" className="text-sm text-gray-600 flex items-center gap-1">
-              <Sparkles className="w-3.5 h-3.5 text-electric-blue" />
+            
               Save as rule for future transactions
             </label>
           </div>
@@ -231,7 +309,9 @@ export function RecategorizeModal({
                   Saving...
                 </div>
               ) : (
-                'Save & Create Rule'
+                applyToAll && hasMatchingTransactions 
+                  ? `Update ${matchingTransactionsCount + 1} Transactions`
+                  : 'Save & Create Rule'
               )}
             </button>
           </div>

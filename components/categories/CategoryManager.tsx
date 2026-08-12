@@ -78,90 +78,77 @@ export function CategoryManager({
     loadCategories()
   }, [])
 
-  const loadCategories = async () => {
-    try {
-      setLoading(true)
-      setError(null)
 
-      const { data: { session } } = await supabase.auth.getSession()
-      
-      console.log('🔐 Session:', session ? 'Found' : 'Not found')
-      
-      if (!session) {
-        setError('Please sign in to view categories')
-        setLoading(false)
-        return
-      }
+const loadCategories = async () => {
+  try {
+    setLoading(true)
+    setError(null)
 
-      console.log('👤 User ID:', session.user.id)
-
-      // Fetch categories from API
-      console.log('📊 Fetching categories from API...')
-      const response = await fetch('/api/categories', {
-        headers: {
-          'Authorization': `Bearer ${session.access_token}`,
-        },
-      })
-
-      if (!response.ok) {
-        const errorData = await response.json()
-        throw new Error(errorData.error || 'Failed to fetch categories')
-      }
-
-      const data = await response.json()
-      const dbCategories = data.categories || []
-
-      console.log('📊 Categories found:', dbCategories.length)
-      console.log('📊 Categories data:', dbCategories)
-
-      // Get transaction counts per category
-      console.log('📊 Fetching transactions...')
-      const { data: transactions, error: txError } = await supabase
-        .from('transactions')
-        .select('category, amount')
-        .eq('user_id', session.user.id)
-
-      if (txError) {
-        console.error('❌ Transactions error:', txError)
-        throw txError
-      }
-
-      console.log('📊 Transactions found:', transactions?.length || 0)
-
-      // Calculate stats per category
-      const categoryStats: Record<string, { count: number; total: number }> = {}
-      transactions?.forEach((t: any) => {
-        if (t.category) {
-          if (!categoryStats[t.category]) {
-            categoryStats[t.category] = { count: 0, total: 0 }
-          }
-          categoryStats[t.category].count += 1
-          categoryStats[t.category].total += t.amount
-        }
-      })
-
-      console.log('📊 Category stats:', categoryStats)
-
-      // Map to categories
-      const mappedCategories = dbCategories?.map((cat: any) => ({
-        id: cat.id,
-        name: cat.name,
-        color: cat.color || '#6B7280',
-        transactionCount: categoryStats[cat.name]?.count || 0,
-        totalAmount: categoryStats[cat.name]?.total || 0,
-        rules: cat.keywords || [],
-        is_system: cat.is_system || false,
-      })) || []
-
-      console.log('✅ Mapped categories:', mappedCategories.length)
-      setCategories(mappedCategories)
-    } catch (error: any) {
-      console.error('❌ Error loading categories:', error)
-      setError(error.message || 'Failed to load categories')
-    } finally {
+    const { data: { session } } = await supabase.auth.getSession()
+    
+    if (!session) {
+      setError('Please sign in to view categories')
       setLoading(false)
+      return
     }
+
+    // Fetch categories from API
+    const response = await fetch('/api/categories', {
+      headers: {
+        'Authorization': `Bearer ${session.access_token}`,
+      },
+    })
+
+    if (!response.ok) {
+      const errorData = await response.json()
+      throw new Error(errorData.error || 'Failed to fetch categories')
+    }
+
+    const data = await response.json()
+    const dbCategories = data.categories || []
+
+    // Get transaction counts per category
+    const { data: transactions, error: txError } = await supabase
+      .from('transactions')
+      .select('category, amount')
+      .eq('user_id', session.user.id)
+
+    if (txError) {
+      console.error('❌ Transactions error:', txError)
+      throw txError
+    }
+
+    // Calculate stats per category
+    const categoryStats: Record<string, { count: number; total: number }> = {}
+    transactions?.forEach((t: any) => {
+      if (t.category) {
+        if (!categoryStats[t.category]) {
+          categoryStats[t.category] = { count: 0, total: 0 }
+        }
+        categoryStats[t.category].count += 1
+        categoryStats[t.category].total += t.amount
+      }
+    })
+
+    // Map to categories - the API already handles deduplication
+    const mappedCategories = dbCategories?.map((cat: any) => ({
+      id: cat.id,
+      name: cat.name,
+      color: cat.color || '#6B7280',
+      transactionCount: categoryStats[cat.name]?.count || 0,
+      totalAmount: categoryStats[cat.name]?.total || 0,
+      rules: cat.keywords || [],
+      is_system: cat.is_system || false,
+    })) || []
+
+    setCategories(mappedCategories)
+  } catch (error: any) {
+    console.error('❌ Error loading categories:', error)
+    setError(error.message || 'Failed to load categories')
+  } finally {
+    setLoading(false)
   }
+}
 
   const filteredCategories = categories.filter(cat =>
     cat.name.toLowerCase().includes(searchTerm.toLowerCase())

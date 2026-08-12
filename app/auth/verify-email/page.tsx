@@ -10,26 +10,24 @@ export default function VerifyEmail() {
     <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-slate-50 to-blue-50/30 px-4">
       <div className="bg-white rounded-xl shadow-card-dark p-8 max-w-md w-full text-center">
         <div className="text-5xl mb-4">📧</div>
-        <h1 className="text-2xl font-bold text-navy">Verify Your Email</h1>
+        <h1 className="text-2xl font-bold text-navy">Check Your Email</h1>
         <p className="text-sm text-gray-500 mt-2">
           We've sent a verification link to your email address.
           Please check your inbox and click the link to verify your account.
         </p>
         <div className="mt-6 p-4 bg-blue-50 rounded-lg border border-blue-200">
           <p className="text-sm text-blue-700">
-            Didn't receive the email? Check your spam folder or 
-            <Link href="/auth/resend-verification" className="text-blue-600 hover:underline font-medium ml-1">
-              resend verification
-            </Link>
+            💡 Didn't receive the email? Check your spam folder.
           </p>
         </div>
-        <Link
-          href="/auth/login"
-          className="inline-flex items-center gap-2 text-sm text-gray-500 hover:text-gray-700 transition-colors mt-6"
-        >
-          <ArrowLeft className="w-4 h-4" />
-          Back to sign in
-        </Link>
+        <div className="mt-4 flex flex-col gap-2">
+          <Link
+            href="/auth/login?message=verification-sent"
+            className="text-sm text-blue-600 hover:underline font-medium"
+          >
+            Back to sign in
+          </Link>
+        </div>
       </div>
     </div>
   )
