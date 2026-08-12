@@ -117,176 +117,66 @@ export default function SettingsPage() {
     setTimeout(() => setSuccessMessage(null), 3000)
   }
 
-  const handleDeleteAccount = async () => {
-    if (deleteConfirmText !== 'DELETE') {
-      setError('Please type "DELETE" to confirm')
+ // app/settings/page.tsx - Updated handleDeleteAccount function
+
+const handleDeleteAccount = async () => {
+  if (deleteConfirmText !== 'DELETE') {
+    setError('Please type "DELETE" to confirm')
+    return
+  }
+
+  setDeleting(true)
+  setError(null)
+
+  try {
+    const { data: { session } } = await supabase.auth.getSession()
+    if (!session) {
+      setError('Please sign in to delete your account')
+      setDeleting(false)
       return
     }
 
-    setDeleting(true)
-    setError(null)
+    console.log('🗑️ Calling delete account API...')
 
-    try {
-      const userId = user.id
+    const response = await fetch('/api/delete-account', {
+      method: 'DELETE',
+      headers: {
+        'Authorization': `Bearer ${session.access_token}`,
+        'Content-Type': 'application/json',
+      },
+    })
 
-      console.log('🗑️ Starting account deletion for user:', userId)
+    const result = await response.json()
 
-      // 1. Delete transactions
-      console.log('📊 Deleting transactions...')
-      const { error: txError } = await supabase
-        .from('transactions')
-        .delete()
-        .eq('user_id', userId)
-
-      if (txError) {
-        console.error('Error deleting transactions:', txError)
-        // Continue with other deletions
-      } else {
-        console.log('✅ Transactions deleted')
-      }
-
-      // 2. Delete budgets
-      console.log('💰 Deleting budgets...')
-      const { error: budgetError } = await supabase
-        .from('budgets')
-        .delete()
-        .eq('user_id', userId)
-
-      if (budgetError) {
-        console.error('Error deleting budgets:', budgetError)
-      } else {
-        console.log('✅ Budgets deleted')
-      }
-
-      // 3. Delete budget notifications
-      console.log('🔔 Deleting budget notifications...')
-      const { error: notifError } = await supabase
-        .from('budget_notifications')
-        .delete()
-        .eq('user_id', userId)
-
-      if (notifError) {
-        console.error('Error deleting budget notifications:', notifError)
-      } else {
-        console.log('✅ Budget notifications deleted')
-      }
-
-      // 4. Delete category rules
-      console.log('📋 Deleting category rules...')
-      const { error: rulesError } = await supabase
-        .from('category_rules')
-        .delete()
-        .eq('user_id', userId)
-
-      if (rulesError) {
-        console.error('Error deleting category rules:', rulesError)
-      } else {
-        console.log('✅ Category rules deleted')
-      }
-
-      // 5. Delete custom categories (user's own categories, not system ones)
-      console.log('🏷️ Deleting custom categories...')
-      const { error: catError } = await supabase
-        .from('categories')
-        .delete()
-        .eq('user_id', userId)
-
-      if (catError) {
-        console.error('Error deleting categories:', catError)
-      } else {
-        console.log('✅ Custom categories deleted')
-      }
-
-      // 6. Delete uploads
-      console.log('📁 Deleting uploads...')
-      const { error: uploadError } = await supabase
-        .from('uploads')
-        .delete()
-        .eq('user_id', userId)
-
-      if (uploadError) {
-        console.error('Error deleting uploads:', uploadError)
-      } else {
-        console.log('✅ Uploads deleted')
-      }
-
-      // 7. Delete files from storage bucket
-      console.log('🗂️ Deleting files from storage...')
-      try {
-        // List all files in the user's folder
-        const { data: files, error: listError } = await supabase
-          .storage
-          .from('statements')
-          .list(userId)
-
-        if (listError) {
-          console.error('Error listing files:', listError)
-        } else if (files && files.length > 0) {
-          // Delete each file
-          const filePaths = files.map((file: any) => `${userId}/${file.name}`)
-          const { error: deleteFilesError } = await supabase
-            .storage
-            .from('statements')
-            .remove(filePaths)
-
-          if (deleteFilesError) {
-            console.error('Error deleting files:', deleteFilesError)
-          } else {
-            console.log(`✅ ${filePaths.length} files deleted from storage`)
-          }
-        } else {
-          console.log('📭 No files to delete from storage')
-        }
-      } catch (storageError) {
-        console.error('Error with storage operations:', storageError)
-      }
-
-      // 8. Delete user profile/account from auth
-      console.log('👤 Deleting user account...')
-      
-      // First, try to delete the user using the admin API
-      // Note: This requires the service role key
-      const { error: deleteUserError } = await supabase.auth.admin.deleteUser(userId)
-
-      if (deleteUserError) {
-        console.error('Error deleting user with admin API:', deleteUserError)
-        
-        // If admin delete fails, try to sign out and let the user know
-        // The user might need to be deleted manually or through a different method
-        setError('Unable to delete account automatically. Please contact support.')
-        setDeleting(false)
-        return
-      }
-
-      console.log('✅ User account deleted successfully')
-
-      // 9. Clear all local storage
-      console.log('🧹 Clearing local storage...')
-      const keysToRemove = [
-        'pref-budget-alerts',
-        'pref-currency',
-        'pref-dateFormat',
-        'pref-theme',
-        'pref-notifications',
-        'sidebar-collapsed'
-      ]
-      keysToRemove.forEach(key => localStorage.removeItem(key))
-      console.log('✅ Local storage cleared')
-
-      // 10. Sign out and redirect to login
-      console.log('🚪 Redirecting to login...')
-      await supabase.auth.signOut()
-      
-      // Redirect to login page
-      router.push('/login')
-      router.refresh()
-
-    } catch (error: any) {
-      console.error('❌ Error during account deletion:', error)
-      setError(error.message || 'Failed to delete account. Please try again or contact support.')
-      setDeleting(false)
+    if (!response.ok) {
+      throw new Error(result.error || 'Failed to delete account')
     }
+
+    console.log('✅ Account deleted successfully:', result.message)
+
+    // Clear all local storage
+    const keysToRemove = [
+      'pref-budget-alerts',
+      'pref-currency',
+      'pref-dateFormat',
+      'pref-theme',
+      'pref-notifications',
+      'sidebar-collapsed'
+    ]
+    keysToRemove.forEach(key => localStorage.removeItem(key))
+    console.log('✅ Local storage cleared')
+
+    // Sign out and redirect to login
+    await supabase.auth.signOut()
+    router.push('/auth/login')
+    router.refresh()
+
+  } catch (error: any) {
+    console.error('❌ Error during account deletion:', error)
+    setError(error.message || 'Failed to delete account. Please try again or contact support.')
+    setDeleting(false)
   }
+}
 
   const handleSignOut = async () => {
     if (confirm('Are you sure you want to sign out?')) {

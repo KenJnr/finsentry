@@ -271,7 +271,7 @@ export function MonthlyTrends() {
         <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4 animate-fade-in" onClick={() => setShowAnalytics(false)}>
           <div className="bg-white rounded-xl shadow-card-dark max-w-2xl w-full max-h-[90vh] overflow-y-auto p-6 sm:p-8 animate-scale-in" onClick={(e) => e.stopPropagation()}>
             <div className="flex items-center justify-between mb-6">
-              <h3 className="text-lg sm:text-xl font-bold text-navy">📊 Monthly Trends Analytics</h3>
+              <h3 className="text-lg sm:text-xl font-bold text-navy">Monthly Trends Analytics</h3>
               <button 
                 onClick={() => setShowAnalytics(false)}
                 className="p-1.5 hover:bg-gray-100 rounded-lg transition-colors"
@@ -285,7 +285,7 @@ export function MonthlyTrends() {
               {/* Best Month */}
               <div className="p-4 bg-emerald-50 rounded-lg border border-emerald-200">
                 <h4 className="text-sm font-semibold text-emerald-700 flex items-center gap-2">
-                  🏆 Best Month
+                  Best Month
                 </h4>
                 <p className="text-sm text-gray-700 mt-1">
                   <span className="font-medium">{bestMonth.month}</span> - Saved 
@@ -299,7 +299,7 @@ export function MonthlyTrends() {
               {/* Worst Month */}
               <div className="p-4 bg-rose-50 rounded-lg border border-rose-200">
                 <h4 className="text-sm font-semibold text-rose-700 flex items-center gap-2">
-                  📉 Worst Month
+                  Worst Month
                 </h4>
                 <p className="text-sm text-gray-700 mt-1">
                   <span className="font-medium">{worstMonth.month}</span> - Saved 
@@ -313,7 +313,7 @@ export function MonthlyTrends() {
               {/* Legend Explanation */}
               <div className="p-4 bg-blue-50 rounded-lg border border-blue-200">
                 <h4 className="text-sm font-semibold text-blue-700 flex items-center gap-2">
-                  📖 What the Bars Mean
+                  What the Bars Mean
                 </h4>
                 <div className="space-y-1.5 mt-2">
                   <div className="flex items-center gap-2">
@@ -340,7 +340,7 @@ export function MonthlyTrends() {
               {/* Key Insights */}
               <div className="p-4 bg-gray-50 rounded-lg border border-gray-200">
                 <h4 className="text-sm font-semibold text-navy flex items-center gap-2">
-                  💡 Key Insights
+                  Key Insights
                 </h4>
                 <ul className="space-y-1.5 mt-2">
                   <li className="text-xs text-gray-700 flex items-start gap-2">

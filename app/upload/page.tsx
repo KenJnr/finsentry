@@ -297,7 +297,7 @@ export default function UploadPage() {
                           </div>
                           
                           {/* CSV Actions */}
-                          <div className="flex flex-wrap gap-3 mt-4">
+                          {/* <div className="flex flex-wrap gap-3 mt-4">
                             <button 
                               onClick={() => setShowCSV(!showCSV)}
                               className="inline-flex items-center justify-center gap-2 px-4 py-2.5 bg-electric-blue text-white rounded-lg hover:bg-electric-blue/90 transition-colors text-sm font-medium"
@@ -326,27 +326,12 @@ export default function UploadPage() {
                               <UploadIcon className="w-4 h-4" />
                               Upload Another
                             </button>
-                          </div>
+                          </div> */}
                         </div>
                       </div>
                     </div>
 
-                    {/* CSV Preview */}
-                    {showCSV && csvData && (
-                      <div className="mt-4 p-4 bg-gray-50 border border-gray-200 rounded-lg">
-                        <h4 className="text-sm font-semibold text-navy mb-2 flex items-center gap-2">
-                          <FileText className="w-4 h-4" />
-                          CSV Preview (First 20 rows)
-                        </h4>
-                        <pre className="text-xs text-gray-600 overflow-x-auto max-h-96 overflow-y-auto p-2 bg-white rounded border border-gray-200">
-                          {csvData.split('\n').slice(0, 21).join('\n')}
-                          {csvData.split('\n').length > 21 && '\n... (truncated)'}
-                        </pre>
-                        <p className="text-xs text-gray-400 mt-2">
-                          Total {csvData.split('\n').length - 1} rows • Download or copy for full data
-                        </p>
-                      </div>
-                    )}
+          
                   </div>
                 )}
               </div>
@@ -354,7 +339,7 @@ export default function UploadPage() {
               {/* Tips Card */}
               <div className="rounded-xl bg-gradient-to-br from-electric-blue via-blue-500 to-blue-400 shadow-card-dark p-4 sm:p-6 transition-all duration-300 hover:shadow-card-hover hover:scale-[1.01]">
                 <h3 className="text-sm font-semibold text-white mb-3 flex items-center gap-2">
-                  <span className="text-xl">💡</span>
+              
                   Tips for Best Results
                 </h3>
                 <ul className="space-y-2 text-xs sm:text-sm text-blue-100">

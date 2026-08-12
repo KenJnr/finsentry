@@ -256,7 +256,7 @@ export function SavingsTips() {
                   </p>
                   <div className="flex items-center gap-3 mt-2">
                     <span className="inline-flex items-center gap-1 text-xs font-medium text-emerald-600 bg-emerald-50 px-2 py-0.5 rounded-full">
-                      <span className="text-emerald-500">💰</span>
+                      
                       Save {tip.potentialSavings}
                     </span>
                     <span className="text-xs text-gray-400">

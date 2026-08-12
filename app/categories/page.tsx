@@ -68,13 +68,13 @@ export default function CategoriesPage() {
                 Manage your transaction categories and rules
               </p>
             </div>
-            <button 
+            {/* <button 
               onClick={() => setShowAddCategory(true)}
               className="inline-flex items-center gap-2 px-4 py-2 bg-electric-blue text-white rounded-lg hover:bg-electric-blue/90 transition-colors text-sm font-medium shadow-md shadow-electric-blue/30"
             >
               <Plus className="w-4 h-4" />
               Add Category
-            </button>
+            </button> */}
           </div>
 
           {/* Tabs - Navy Active */}

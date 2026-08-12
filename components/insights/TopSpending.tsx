@@ -329,7 +329,7 @@ export function TopSpending() {
           <div className="flex items-start gap-3">
             <AlertCircle className="w-4 h-4 text-electric-blue flex-shrink-0 mt-0.5" />
             <div>
-              <p className="text-sm font-medium text-navy">💡 Quick Insight</p>
+              <p className="text-sm font-medium text-navy">Quick Insight</p>
               <p className="text-xs text-gray-500 mt-0.5">
                 Your top category is <span className="font-semibold text-navy">{topCategories[0].category}</span> at 
                 <span className="font-semibold text-navy"> GH₵{topCategories[0].amount.toFixed(2)}</span> 
