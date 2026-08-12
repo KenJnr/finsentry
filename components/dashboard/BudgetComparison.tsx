@@ -3,7 +3,7 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { TrendingUp, TrendingDown, AlertCircle, CheckCircle, Loader2 } from 'lucide-react'
+import { TrendingUp, TrendingDown, AlertCircle, CheckCircle, Loader2, Calendar } from 'lucide-react'
 import { supabase } from '@/lib/supabase'
 
 interface BudgetItem {
@@ -12,6 +12,7 @@ interface BudgetItem {
   actual: number
   variance: number
   status: 'under' | 'over' | 'on-track'
+  period_type: 'weekly' | 'monthly' | 'yearly'
 }
 
 interface BudgetComparisonProps {
@@ -23,6 +24,7 @@ export function BudgetComparison({ refreshTrigger = 0 }: BudgetComparisonProps) 
   const [budgetData, setBudgetData] = useState<BudgetItem[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+  const [periodFilter, setPeriodFilter] = useState<'all' | 'weekly' | 'monthly' | 'yearly'>('all')
 
   useEffect(() => {
     loadBudgetData()
@@ -40,14 +42,26 @@ export function BudgetComparison({ refreshTrigger = 0 }: BudgetComparisonProps) 
         return
       }
 
-      const currentMonth = new Date().toISOString().slice(0, 7)
+      const now = new Date()
+      const currentMonth = now.toISOString().slice(0, 7)
+      const currentYear = now.getFullYear().toString()
+      
+      const day = now.getDay()
+      const diff = now.getDate() - day + (day === 0 ? -6 : 1)
+      const currentWeek = new Date(now)
+      currentWeek.setDate(diff)
+      const weekStart = currentWeek.toISOString().slice(0, 10)
 
-      // Fetch budgets
+      // Fix: Use proper date filtering with gte/lt instead of like
       const { data: budgets, error: budgetError } = await supabase
         .from('budgets')
         .select('*')
         .eq('user_id', session.user.id)
-        .eq('month', currentMonth + '-01')
+        .or(
+          `period_type.eq.weekly,` +
+          `and(period_type.eq.monthly,period_start.gte.${currentMonth}-01,period_start.lt.${currentMonth}-31),` +
+          `and(period_type.eq.yearly,period_start.gte.${currentYear}-01-01,period_start.lt.${parseInt(currentYear) + 1}-01-01)`
+        )
 
       if (budgetError) throw budgetError
 
@@ -57,16 +71,15 @@ export function BudgetComparison({ refreshTrigger = 0 }: BudgetComparisonProps) 
         return
       }
 
-      // Fetch actual spending
+      const periodStart = budgets.some(b => b.period_type === 'weekly') ? weekStart : currentMonth + '-01'
       const { data: transactions, error: txError } = await supabase
         .from('transactions')
-        .select('category, amount, type')
+        .select('category, amount, type, date')
         .eq('user_id', session.user.id)
-        .gte('date', currentMonth + '-01')
+        .gte('date', periodStart)
 
       if (txError) throw txError
 
-      // Calculate actual spending per category
       const actualSpending: Record<string, number> = {}
       transactions?.forEach((t: any) => {
         if (t.type?.toLowerCase() === 'debit') {
@@ -75,7 +88,6 @@ export function BudgetComparison({ refreshTrigger = 0 }: BudgetComparisonProps) 
         }
       })
 
-      // Build budget items
       const items: BudgetItem[] = budgets.map((b: any) => {
         const actual = actualSpending[b.category] || 0
         const variance = b.amount - actual
@@ -88,7 +100,8 @@ export function BudgetComparison({ refreshTrigger = 0 }: BudgetComparisonProps) 
           budgeted: b.amount,
           actual: Math.round(actual * 100) / 100,
           variance: Math.round(variance * 100) / 100,
-          status
+          status,
+          period_type: b.period_type || 'monthly'
         }
       })
 
@@ -105,11 +118,12 @@ export function BudgetComparison({ refreshTrigger = 0 }: BudgetComparisonProps) 
   const filteredData = budgetData.filter(item => {
     if (viewMode === 'over') return item.status === 'over'
     if (viewMode === 'under') return item.status === 'under'
+    if (periodFilter !== 'all') return item.period_type === periodFilter
     return true
   })
 
-  const totalBudgeted = budgetData.reduce((sum, item) => sum + item.budgeted, 0)
-  const totalActual = budgetData.reduce((sum, item) => sum + item.actual, 0)
+  const totalBudgeted = filteredData.reduce((sum, item) => sum + item.budgeted, 0)
+  const totalActual = filteredData.reduce((sum, item) => sum + item.actual, 0)
 
   if (loading) {
     return (
@@ -138,7 +152,7 @@ export function BudgetComparison({ refreshTrigger = 0 }: BudgetComparisonProps) 
     <div className="bg-white rounded-xl shadow-card-dark p-4 sm:p-6 transition-all duration-300 hover:shadow-card-hover">
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 mb-3 sm:mb-4">
         <h3 className="text-base sm:text-lg font-semibold text-navy">Budget vs Actual</h3>
-        {budgetData.length > 0 && (
+        {filteredData.length > 0 && (
           <div className="flex items-center gap-2 text-xs text-gray-500">
             <span className="font-medium">Total:</span>
             <span className={totalBudgeted - totalActual >= 0 ? 'text-emerald-600' : 'text-rose-600'}>
@@ -148,7 +162,49 @@ export function BudgetComparison({ refreshTrigger = 0 }: BudgetComparisonProps) 
         )}
       </div>
       
-      {/* Filters */}
+      <div className="flex flex-wrap gap-1.5 sm:gap-2 mb-4 sm:mb-5">
+        <button
+          onClick={() => setPeriodFilter('all')}
+          className={`px-2.5 sm:px-4 py-1 sm:py-1.5 text-[10px] sm:text-xs font-medium rounded-full transition-all duration-200 ${
+            periodFilter === 'all' 
+              ? 'bg-blue-500 text-white shadow-md' 
+              : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+          }`}
+        >
+          All Periods
+        </button>
+        <button
+          onClick={() => setPeriodFilter('weekly')}
+          className={`px-2.5 sm:px-4 py-1 sm:py-1.5 text-[10px] sm:text-xs font-medium rounded-full transition-all duration-200 ${
+            periodFilter === 'weekly' 
+              ? 'bg-blue-500 text-white shadow-md' 
+              : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+          }`}
+        >
+          Weekly
+        </button>
+        <button
+          onClick={() => setPeriodFilter('monthly')}
+          className={`px-2.5 sm:px-4 py-1 sm:py-1.5 text-[10px] sm:text-xs font-medium rounded-full transition-all duration-200 ${
+            periodFilter === 'monthly' 
+              ? 'bg-blue-500 text-white shadow-md' 
+              : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+          }`}
+        >
+          Monthly
+        </button>
+        <button
+          onClick={() => setPeriodFilter('yearly')}
+          className={`px-2.5 sm:px-4 py-1 sm:py-1.5 text-[10px] sm:text-xs font-medium rounded-full transition-all duration-200 ${
+            periodFilter === 'yearly' 
+              ? 'bg-blue-500 text-white shadow-md' 
+              : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+          }`}
+        >
+          Yearly
+        </button>
+      </div>
+
       <div className="flex flex-wrap gap-1.5 sm:gap-2 mb-4 sm:mb-5">
         <button
           onClick={() => setViewMode('all')}
@@ -158,7 +214,7 @@ export function BudgetComparison({ refreshTrigger = 0 }: BudgetComparisonProps) 
               : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
           }`}
         >
-          All ({budgetData.length})
+          All ({filteredData.length})
         </button>
         <button
           onClick={() => setViewMode('over')}
@@ -168,7 +224,7 @@ export function BudgetComparison({ refreshTrigger = 0 }: BudgetComparisonProps) 
               : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
           }`}
         >
-          Over ({budgetData.filter(b => b.status === 'over').length})
+          Over ({filteredData.filter(b => b.status === 'over').length})
         </button>
         <button
           onClick={() => setViewMode('under')}
@@ -178,24 +234,19 @@ export function BudgetComparison({ refreshTrigger = 0 }: BudgetComparisonProps) 
               : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
           }`}
         >
-          Under ({budgetData.filter(b => b.status === 'under').length})
+          Under ({filteredData.filter(b => b.status === 'under').length})
         </button>
       </div>
 
-      {/* Budget Items */}
-      {budgetData.length === 0 ? (
+      {filteredData.length === 0 ? (
         <div className="text-center py-6 sm:py-8 text-gray-400 text-xs sm:text-sm">
-          No budgets set for this month.
+          No budgets match the selected filters.
           <button 
             onClick={() => window.location.href = '/budget'}
             className="block mx-auto mt-2 text-electric-blue hover:underline text-sm"
           >
             Set a budget
           </button>
-        </div>
-      ) : filteredData.length === 0 ? (
-        <div className="text-center py-6 sm:py-8 text-gray-400 text-xs sm:text-sm">
-          No categories match the selected filter
         </div>
       ) : (
         <div className="space-y-3 sm:space-y-4 max-h-60 sm:max-h-80 overflow-y-auto pr-1 sm:pr-2 custom-scrollbar">
@@ -205,6 +256,8 @@ export function BudgetComparison({ refreshTrigger = 0 }: BudgetComparisonProps) 
             const isUnder = item.status === 'under'
             const isOnTrack = item.status === 'on-track'
             const varianceAmount = Math.abs(item.variance)
+            const periodLabel = item.period_type === 'weekly' ? 'Weekly' : 
+                                item.period_type === 'yearly' ? 'Yearly' : 'Monthly'
 
             return (
               <div key={item.category} className="space-y-1">
@@ -212,6 +265,10 @@ export function BudgetComparison({ refreshTrigger = 0 }: BudgetComparisonProps) 
                   <div className="flex items-center gap-2 min-w-0">
                     <span className="font-medium text-navy text-xs sm:text-sm truncate">
                       {item.category}
+                    </span>
+                    <span className="text-[10px] text-gray-400 bg-gray-100 px-1.5 py-0.5 rounded-full flex items-center gap-1">
+                      <Calendar className="w-3 h-3" />
+                      {periodLabel}
                     </span>
                     {isOver && <TrendingUp className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-rose-500 flex-shrink-0" />}
                     {isUnder && <TrendingDown className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-emerald-500 flex-shrink-0" />}

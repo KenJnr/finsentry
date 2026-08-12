@@ -21,6 +21,7 @@ import {
   TrendingUp,
   FileSpreadsheet,
   HelpCircle,
+  AlertTriangle,
 } from 'lucide-react'
 import { supabase } from '@/lib/supabase'
 
@@ -78,6 +79,7 @@ export function Sidebar({ isMobile = false, onMobileClose }: SidebarProps) {
     { icon: PieChart, label: 'Categories', href: '/categories' },
     { icon: Wallet, label: 'Budget', href: '/budget' },
     { icon: TrendingUp, label: 'Transaction & Insights', href: '/insights' },
+    { icon: AlertTriangle, label: 'Anomalies', href: '/anomalies' },
   ]
 
   const sidebarWidth = isCollapsed ? 'w-sidebar-collapsed' : 'w-sidebar-expanded'

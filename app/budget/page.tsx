@@ -12,7 +12,8 @@ import {
   Plus, 
   TrendingUp, 
   TrendingDown,
-  AlertCircle
+  AlertCircle,
+  Calendar
 } from 'lucide-react'
 
 export default function BudgetPage() {
@@ -54,7 +55,6 @@ export default function BudgetPage() {
 
   const handleBudgetSaved = () => {
     setShowAddBudget(false)
-    // Trigger refresh of both components
     setRefreshTrigger(prev => prev + 1)
   }
 
@@ -72,7 +72,7 @@ export default function BudgetPage() {
             <div>
               <h1 className="text-xl sm:text-2xl font-bold text-navy">Budget</h1>
               <p className="text-xs sm:text-sm text-gray-500 mt-0.5">
-                Plan and track your spending across categories
+                Plan and track your spending across categories (Weekly, Monthly, Yearly)
               </p>
             </div>
             <button 
@@ -86,16 +86,12 @@ export default function BudgetPage() {
 
           {/* Content */}
           <div className="space-y-6">
-            {/* Budget Summary - Pass refreshTrigger to reload */}
             <BudgetSummary key={`summary-${refreshTrigger}`} />
-
-            {/* Budget List - Pass refreshTrigger to reload */}
             <BudgetList 
               key={`list-${refreshTrigger}`}
               refreshTrigger={refreshTrigger}
             />
 
-            {/* Add Budget Modal */}
             {showAddBudget && (
               <BudgetForm 
                 onClose={() => setShowAddBudget(false)}

@@ -45,14 +45,27 @@ export function BudgetSummary({ refreshTrigger = 0 }: BudgetSummaryProps) {
         return
       }
 
-      const currentMonth = new Date().toISOString().slice(0, 7)
+      const now = new Date()
+      const currentMonth = now.toISOString().slice(0, 7)
+      const currentYear = now.getFullYear().toString()
+      
+      // Get start of current week (Monday)
+      const day = now.getDay()
+      const diff = now.getDate() - day + (day === 0 ? -6 : 1)
+      const currentWeek = new Date(now)
+      currentWeek.setDate(diff)
+      const weekStart = currentWeek.toISOString().slice(0, 10)
 
-      // Fetch budgets
+      // Fetch budgets for all periods
       const { data: budgets, error: budgetError } = await supabase
         .from('budgets')
         .select('*')
         .eq('user_id', session.user.id)
-        .eq('month', currentMonth + '-01')
+        .or(
+          `period_type.eq.weekly,` +
+          `and(period_type.eq.monthly,period_start.gte.${currentMonth}-01,period_start.lt.${currentMonth}-31),` +
+          `and(period_type.eq.yearly,period_start.gte.${currentYear}-01-01,period_start.lt.${parseInt(currentYear) + 1}-01-01)`
+        )
 
       if (budgetError) throw budgetError
 
@@ -68,12 +81,17 @@ export function BudgetSummary({ refreshTrigger = 0 }: BudgetSummaryProps) {
         return
       }
 
+      // Determine period start date for transactions
+      const periodStart = budgets.some(b => b.period_type === 'weekly') 
+        ? weekStart 
+        : currentMonth + '-01'
+
       // Fetch actual spending
       const { data: transactions, error: txError } = await supabase
         .from('transactions')
-        .select('category, amount, type')
+        .select('category, amount, type, date')
         .eq('user_id', session.user.id)
-        .gte('date', currentMonth + '-01')
+        .gte('date', periodStart)
 
       if (txError) throw txError
 
@@ -131,8 +149,8 @@ export function BudgetSummary({ refreshTrigger = 0 }: BudgetSummaryProps) {
     return (
       <div className="grid grid-cols-1 lg:grid-cols-4 gap-3 sm:gap-4">
         <div className="col-span-full rounded-xl bg-gradient-to-br from-electric-blue via-blue-500 to-blue-400 shadow-card-dark p-6 text-center text-white">
-          <p className="text-sm">No budgets set for this month</p>
-          <p className="text-xs text-blue-200 mt-1">Set a budget to start tracking</p>
+          <p className="text-sm">No budgets set for this period</p>
+          <p className="text-xs text-blue-200 mt-1">Set a weekly, monthly, or yearly budget to start tracking</p>
         </div>
       </div>
     )

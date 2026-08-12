@@ -13,7 +13,8 @@ import {
   Search,
   Loader2,
   Bell,
-  BellOff
+  BellOff,
+  Calendar
 } from 'lucide-react'
 import { supabase } from '@/lib/supabase'
 import { BudgetForm } from './BudgetForm'
@@ -26,7 +27,8 @@ interface BudgetItem {
   actual: number
   remaining: number
   status: 'under' | 'over' | 'on-track'
-  month: string
+  period_type: 'weekly' | 'monthly' | 'yearly'
+  period_start: string
   notify_at_80: boolean
   notify_at_100: boolean
 }
@@ -43,15 +45,14 @@ export function BudgetList({ refreshTrigger = 0 }: BudgetListProps) {
   const [editingBudget, setEditingBudget] = useState<any | null>(null)
   const [showEditModal, setShowEditModal] = useState(false)
   const [categoryColors, setCategoryColors] = useState<Record<string, string>>({})
+  const [periodFilter, setPeriodFilter] = useState<'all' | 'weekly' | 'monthly' | 'yearly'>('all')
 
   const defaultColors = [
     '#3B82F6', '#10B981', '#F59E0B', '#EF4444', '#8B5CF6', 
     '#EC4899', '#14B8A6', '#F97316', '#6B7280', '#7C3AED'
   ]
 
-  // Load budgets whenever refreshTrigger changes
   useEffect(() => {
-    console.log('🔄 BudgetList refresh triggered:', refreshTrigger)
     loadBudgets()
   }, [refreshTrigger])
 
@@ -67,7 +68,6 @@ export function BudgetList({ refreshTrigger = 0 }: BudgetListProps) {
         return
       }
 
-      // Fetch categories with colors
       const { data: categoriesData } = await supabase
         .from('categories')
         .select('name, color')
@@ -79,19 +79,29 @@ export function BudgetList({ refreshTrigger = 0 }: BudgetListProps) {
       })
       setCategoryColors(colorMap)
 
-      // Fetch budgets for current month
-      const currentMonth = new Date().toISOString().slice(0, 7)
-      console.log('📅 Fetching budgets for month:', currentMonth)
+      const now = new Date()
+      const currentMonth = now.toISOString().slice(0, 7)
+      const currentYear = now.getFullYear().toString()
       
+      // Get start of current week (Monday)
+      const day = now.getDay()
+      const diff = now.getDate() - day + (day === 0 ? -6 : 1)
+      const currentWeek = new Date(now)
+      currentWeek.setDate(diff)
+      const weekStart = currentWeek.toISOString().slice(0, 10)
+
+      // Fetch budgets - using proper date filtering
       const { data: budgetData, error: budgetError } = await supabase
         .from('budgets')
         .select('*')
         .eq('user_id', session.user.id)
-        .eq('month', currentMonth + '-01')
+        .or(
+          `period_type.eq.weekly,` +
+          `and(period_type.eq.monthly,period_start.gte.${currentMonth}-01,period_start.lt.${currentMonth}-31),` +
+          `and(period_type.eq.yearly,period_start.gte.${currentYear}-01-01,period_start.lt.${parseInt(currentYear) + 1}-01-01)`
+        )
 
       if (budgetError) throw budgetError
-
-      console.log('📊 Budgets found:', budgetData?.length || 0)
 
       if (!budgetData || budgetData.length === 0) {
         setBudgets([])
@@ -99,16 +109,20 @@ export function BudgetList({ refreshTrigger = 0 }: BudgetListProps) {
         return
       }
 
-      // Fetch actual spending for each category
+      // Get period start date for transactions
+      const periodStart = budgetData.some(b => b.period_type === 'weekly') 
+        ? weekStart 
+        : currentMonth + '-01'
+
+      // Fetch transactions with proper date filter
       const { data: transactions, error: txError } = await supabase
         .from('transactions')
-        .select('category, amount, type')
+        .select('category, amount, type, date')
         .eq('user_id', session.user.id)
-        .gte('date', currentMonth + '-01')
+        .gte('date', periodStart)
 
       if (txError) throw txError
 
-      // Calculate actual spending per category
       const actualSpending: Record<string, number> = {}
       transactions?.forEach((t: any) => {
         if (t.type?.toLowerCase() === 'debit') {
@@ -117,7 +131,6 @@ export function BudgetList({ refreshTrigger = 0 }: BudgetListProps) {
         }
       })
 
-      // Build budget items
       const budgetItems: BudgetItem[] = budgetData.map((b: any) => {
         const actual = actualSpending[b.category] || 0
         const remaining = b.amount - actual
@@ -133,7 +146,8 @@ export function BudgetList({ refreshTrigger = 0 }: BudgetListProps) {
           actual: Math.round(actual * 100) / 100,
           remaining: Math.round(remaining * 100) / 100,
           status,
-          month: b.month,
+          period_type: b.period_type || 'monthly',
+          period_start: b.period_start,
           notify_at_80: b.notify_at_80,
           notify_at_100: b.notify_at_100
         }
@@ -164,7 +178,6 @@ export function BudgetList({ refreshTrigger = 0 }: BudgetListProps) {
 
       if (error) throw error
 
-      // Reload budgets after deletion
       loadBudgets()
     } catch (error: any) {
       console.error('Error deleting budget:', error)
@@ -172,63 +185,11 @@ export function BudgetList({ refreshTrigger = 0 }: BudgetListProps) {
     }
   }
 
-  const handleEditClick = (budget: BudgetItem) => {
-    setEditingBudget({
-      id: budget.id,
-      category: budget.category,
-      amount: budget.budgeted,
-      month: budget.month,
-      notify_at_80: budget.notify_at_80,
-      notify_at_100: budget.notify_at_100
-    })
-    setShowEditModal(true)
-  }
-
-  const handleEditSuccess = () => {
-    console.log('✅ Edit success, reloading budgets...')
-    setShowEditModal(false)
-    setEditingBudget(null)
-    // Reload budgets after edit
-    loadBudgets()
-  }
-
-  const getStatusBadge = (status: BudgetItem['status']) => {
-    switch (status) {
-      case 'under':
-        return (
-          <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-emerald-100 text-emerald-700 rounded-full text-xs">
-            <CheckCircle className="w-3 h-3" />
-            Under Budget
-          </span>
-        )
-      case 'over':
-        return (
-          <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-rose-100 text-rose-700 rounded-full text-xs">
-            <AlertCircle className="w-3 h-3" />
-            Over Budget
-          </span>
-        )
-      case 'on-track':
-        return (
-          <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-blue-100 text-blue-700 rounded-full text-xs">
-            <CheckCircle className="w-3 h-3" />
-            On Track
-          </span>
-        )
-    }
-  }
-
-  const getProgressColor = (status: BudgetItem['status']) => {
-    switch (status) {
-      case 'under': return 'bg-emerald-500'
-      case 'over': return 'bg-rose-500'
-      case 'on-track': return 'bg-blue-500'
-    }
-  }
-
-  const filteredBudgets = budgets.filter(b =>
-    b.category.toLowerCase().includes(searchTerm.toLowerCase())
-  )
+  const filteredBudgets = budgets.filter(b => {
+    const matchesSearch = b.category.toLowerCase().includes(searchTerm.toLowerCase())
+    const matchesPeriod = periodFilter === 'all' || b.period_type === periodFilter
+    return matchesSearch && matchesPeriod
+  })
 
   if (loading) {
     return (
@@ -259,15 +220,27 @@ export function BudgetList({ refreshTrigger = 0 }: BudgetListProps) {
       <div className="bg-white rounded-xl shadow-card-dark p-4 sm:p-6">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-4">
           <h2 className="text-base sm:text-lg font-semibold text-navy">Budget Categories</h2>
-          <div className="relative">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
-            <input
-              type="text"
-              placeholder="Search budgets..."
-              value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
-              className="pl-9 pr-3 py-1.5 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-electric-blue/20 focus:border-electric-blue w-full sm:w-48"
-            />
+          <div className="flex flex-wrap gap-2">
+            <select
+              value={periodFilter}
+              onChange={(e) => setPeriodFilter(e.target.value as any)}
+              className="px-3 py-1.5 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-electric-blue/20 focus:border-electric-blue bg-white"
+            >
+              <option value="all">All Periods</option>
+              <option value="weekly">Weekly</option>
+              <option value="monthly">Monthly</option>
+              <option value="yearly">Yearly</option>
+            </select>
+            <div className="relative">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+              <input
+                type="text"
+                placeholder="Search budgets..."
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+                className="pl-9 pr-3 py-1.5 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-electric-blue/20 focus:border-electric-blue w-full sm:w-48"
+              />
+            </div>
           </div>
         </div>
 
@@ -278,13 +251,15 @@ export function BudgetList({ refreshTrigger = 0 }: BudgetListProps) {
             </div>
           ) : filteredBudgets.length === 0 ? (
             <div className="text-center py-8 text-gray-400 text-sm">
-              No budgets match your search
+              No budgets match your filters
             </div>
           ) : (
             filteredBudgets.map((budget) => {
               const percentage = Math.min((budget.actual / budget.budgeted) * 100, 100)
               const isOver = budget.status === 'over'
               const isNearLimit = percentage >= 80 && !isOver
+              const periodLabel = budget.period_type === 'weekly' ? 'Weekly' : 
+                                  budget.period_type === 'yearly' ? 'Yearly' : 'Monthly'
               
               return (
                 <div
@@ -294,7 +269,6 @@ export function BudgetList({ refreshTrigger = 0 }: BudgetListProps) {
                   }`}
                 >
                   <div className="flex flex-col sm:flex-row sm:items-center gap-3">
-                    {/* Category Info */}
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center gap-3">
                         <div 
@@ -303,6 +277,10 @@ export function BudgetList({ refreshTrigger = 0 }: BudgetListProps) {
                         />
                         <span className="text-sm font-medium text-gray-700">
                           {budget.category}
+                        </span>
+                        <span className="text-xs text-gray-400 bg-gray-200 px-2 py-0.5 rounded-full flex items-center gap-1">
+                          <Calendar className="w-3 h-3" />
+                          {periodLabel}
                         </span>
                         {isOver && (
                           <span className="text-xs font-medium text-rose-600 bg-rose-50 px-2 py-0.5 rounded-full">
@@ -327,14 +305,26 @@ export function BudgetList({ refreshTrigger = 0 }: BudgetListProps) {
                           Remaining: GH₵{Math.abs(budget.remaining).toFixed(2)}
                         </span>
                         <span>•</span>
-                        {getStatusBadge(budget.status)}
+                        {budget.status === 'under' && <span className="text-emerald-600">Under Budget</span>}
+                        {budget.status === 'over' && <span className="text-rose-600">Over Budget</span>}
+                        {budget.status === 'on-track' && <span className="text-blue-600">On Track</span>}
                       </div>
                     </div>
 
-                    {/* Actions */}
                     <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
                       <button
-                        onClick={() => handleEditClick(budget)}
+                        onClick={() => {
+                          setEditingBudget({
+                            id: budget.id,
+                            category: budget.category,
+                            amount: budget.budgeted,
+                            period_type: budget.period_type,
+                            period_start: budget.period_start,
+                            notify_at_80: budget.notify_at_80,
+                            notify_at_100: budget.notify_at_100
+                          })
+                          setShowEditModal(true)
+                        }}
                         className="p-1.5 text-gray-400 hover:text-electric-blue rounded-md hover:bg-white transition-colors"
                         title="Edit budget"
                       >
@@ -350,11 +340,12 @@ export function BudgetList({ refreshTrigger = 0 }: BudgetListProps) {
                     </div>
                   </div>
 
-                  {/* Progress Bar */}
                   <div className="mt-2">
                     <div className="w-full bg-gray-200 rounded-full h-2">
                       <div
-                        className={`h-2 rounded-full transition-all duration-500 ${getProgressColor(budget.status)}`}
+                        className={`h-2 rounded-full transition-all duration-500 ${
+                          isOver ? 'bg-rose-500' : isNearLimit ? 'bg-amber-500' : 'bg-emerald-500'
+                        }`}
                         style={{ width: `${percentage}%` }}
                       />
                     </div>
@@ -371,14 +362,17 @@ export function BudgetList({ refreshTrigger = 0 }: BudgetListProps) {
         </div>
       </div>
 
-      {/* Edit Budget Modal */}
       {showEditModal && (
         <BudgetForm
           onClose={() => {
             setShowEditModal(false)
             setEditingBudget(null)
           }}
-          onSave={handleEditSuccess}
+          onSave={() => {
+            loadBudgets()
+            setShowEditModal(false)
+            setEditingBudget(null)
+          }}
           editBudget={editingBudget}
         />
       )}

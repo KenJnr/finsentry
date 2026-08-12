@@ -3,7 +3,7 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { X, Bell, BellOff } from 'lucide-react'
+import { X, Bell, BellOff, Calendar } from 'lucide-react'
 import { supabase } from '@/lib/supabase'
 
 interface BudgetFormProps {
@@ -13,7 +13,8 @@ interface BudgetFormProps {
     id: string
     category: string
     amount: number
-    month: string
+    period_type: 'weekly' | 'monthly' | 'yearly'
+    period_start: string
     notify_at_80: boolean
     notify_at_100: boolean
   } | null
@@ -23,7 +24,8 @@ export function BudgetForm({ onClose, onSave, editBudget }: BudgetFormProps) {
   const [budget, setBudget] = useState({
     category: '',
     amount: '',
-    month: new Date().toISOString().slice(0, 7),
+    period_type: 'monthly' as 'weekly' | 'monthly' | 'yearly',
+    period_start: new Date().toISOString().slice(0, 7),
     notify_at_80: true,
     notify_at_100: true
   })
@@ -37,7 +39,8 @@ export function BudgetForm({ onClose, onSave, editBudget }: BudgetFormProps) {
       setBudget({
         category: editBudget.category,
         amount: editBudget.amount.toString(),
-        month: editBudget.month.slice(0, 7),
+        period_type: editBudget.period_type || 'monthly',
+        period_start: editBudget.period_start?.slice(0, 7) || new Date().toISOString().slice(0, 7),
         notify_at_80: editBudget.notify_at_80,
         notify_at_100: editBudget.notify_at_100
       })
@@ -64,6 +67,17 @@ export function BudgetForm({ onClose, onSave, editBudget }: BudgetFormProps) {
     }
   }
 
+  const getPeriodDate = () => {
+    const date = new Date(budget.period_start + '-01')
+    if (budget.period_type === 'weekly') {
+      // Get start of week (Monday)
+      const day = date.getDay()
+      const diff = date.getDate() - day + (day === 0 ? -6 : 1)
+      date.setDate(diff)
+    }
+    return date.toISOString()
+  }
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     
@@ -82,16 +96,16 @@ export function BudgetForm({ onClose, onSave, editBudget }: BudgetFormProps) {
         return
       }
 
-      const monthDate = new Date(budget.month + '-01').toISOString()
+      const periodStart = getPeriodDate()
 
       if (editBudget) {
-        // Update existing budget - allow changing category and month
         const { error: updateError } = await supabase
           .from('budgets')
           .update({
             category: budget.category,
             amount: parseFloat(budget.amount),
-            month: monthDate,
+            period_type: budget.period_type,
+            period_start: periodStart,
             notify_at_80: budget.notify_at_80,
             notify_at_100: budget.notify_at_100,
             updated_at: new Date().toISOString()
@@ -101,29 +115,29 @@ export function BudgetForm({ onClose, onSave, editBudget }: BudgetFormProps) {
 
         if (updateError) throw updateError
       } else {
-        // Check if budget already exists for this category and month
         const { data: existing } = await supabase
           .from('budgets')
           .select('id')
           .eq('user_id', session.user.id)
           .eq('category', budget.category)
-          .eq('month', monthDate)
+          .eq('period_type', budget.period_type)
+          .eq('period_start', periodStart)
           .maybeSingle()
 
         if (existing) {
-          setError('A budget already exists for this category and month')
+          setError(`A budget already exists for this ${budget.period_type} period`)
           setLoading(false)
           return
         }
 
-        // Create new budget
         const { error: insertError } = await supabase
           .from('budgets')
           .insert({
             user_id: session.user.id,
             category: budget.category,
             amount: parseFloat(budget.amount),
-            month: monthDate,
+            period_type: budget.period_type,
+            period_start: periodStart,
             notify_at_80: budget.notify_at_80,
             notify_at_100: budget.notify_at_100
           })
@@ -141,12 +155,18 @@ export function BudgetForm({ onClose, onSave, editBudget }: BudgetFormProps) {
     }
   }
 
+  const periodOptions = [
+    { value: 'weekly', label: 'Weekly' },
+    { value: 'monthly', label: 'Monthly' },
+    { value: 'yearly', label: 'Yearly' }
+  ]
+
   return (
     <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4 animate-fade-in">
       <div className="bg-white rounded-xl shadow-card-dark max-w-md w-full p-6 animate-scale-in">
         <div className="flex items-center justify-between mb-4">
           <h3 className="text-lg font-semibold text-navy">
-            {editBudget ? 'Edit Budget' : 'Set Monthly Budget'}
+            {editBudget ? 'Edit Budget' : 'Set Budget'}
           </h3>
           <button
             onClick={onClose}
@@ -167,6 +187,7 @@ export function BudgetForm({ onClose, onSave, editBudget }: BudgetFormProps) {
                 onChange={(e) => setBudget({ ...budget, category: e.target.value })}
                 className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-electric-blue/20 focus:border-electric-blue"
                 required
+                disabled={!!editBudget}
               >
                 <option value="">Select a category</option>
                 {categories.map(cat => (
@@ -174,13 +195,50 @@ export function BudgetForm({ onClose, onSave, editBudget }: BudgetFormProps) {
                 ))}
               </select>
               {editBudget && (
-                <p className="text-xs text-amber-600 mt-1">Changing category will update the budget</p>
+                <p className="text-xs text-amber-600 mt-1">Category cannot be changed</p>
               )}
             </div>
 
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">
-                Monthly Budget (GH₵)
+                Period
+              </label>
+              <select
+                value={budget.period_type}
+                onChange={(e) => setBudget({ ...budget, period_type: e.target.value as any })}
+                className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-electric-blue/20 focus:border-electric-blue"
+                disabled={!!editBudget}
+              >
+                {periodOptions.map(opt => (
+                  <option key={opt.value} value={opt.value}>{opt.label}</option>
+                ))}
+              </select>
+              {editBudget && (
+                <p className="text-xs text-amber-600 mt-1">Period cannot be changed</p>
+              )}
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                {budget.period_type === 'weekly' ? 'Week Starting' : 
+                 budget.period_type === 'yearly' ? 'Year' : 'Month'}
+              </label>
+              <input
+                type={budget.period_type === 'yearly' ? 'number' : 'month'}
+                value={budget.period_start}
+                onChange={(e) => setBudget({ ...budget, period_start: e.target.value })}
+                className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-electric-blue/20 focus:border-electric-blue"
+                disabled={!!editBudget}
+              />
+              {editBudget && (
+                <p className="text-xs text-amber-600 mt-1">Period cannot be changed</p>
+              )}
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                {budget.period_type === 'weekly' ? 'Weekly' : 
+                 budget.period_type === 'yearly' ? 'Yearly' : 'Monthly'} Budget (GH₵)
               </label>
               <div className="relative">
                 <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 text-sm">GH₵</span>
@@ -195,21 +253,6 @@ export function BudgetForm({ onClose, onSave, editBudget }: BudgetFormProps) {
                   required
                 />
               </div>
-            </div>
-
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
-                Month
-              </label>
-              <input
-                type="month"
-                value={budget.month}
-                onChange={(e) => setBudget({ ...budget, month: e.target.value })}
-                className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-electric-blue/20 focus:border-electric-blue"
-              />
-              {editBudget && (
-                <p className="text-xs text-amber-600 mt-1">Changing month will create a new budget for that month</p>
-              )}
             </div>
 
             <div className="space-y-2">
@@ -245,8 +288,6 @@ export function BudgetForm({ onClose, onSave, editBudget }: BudgetFormProps) {
                 {error}
               </div>
             )}
-
-            
           </div>
 
           <div className="flex gap-3 mt-6">
