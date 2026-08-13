@@ -57,7 +57,7 @@ export function UploadProgress({
       <div className="flex items-center justify-between mb-3">
         <div className="flex items-center gap-2">
           <FileText className="w-4 h-4 text-gray-400" />
-          <span className="text-sm text-gray-600 truncate max-w-[200px]">
+          <span className="text-sm dark:text-gray-400 - truncate max-w-[200px]">
             {fileName || 'Uploading...'}
           </span>
         </div>
@@ -76,7 +76,7 @@ export function UploadProgress({
           <div 
             className={`
               h-2.5 rounded-full transition-all duration-500 ease-out
-              ${isError ? 'bg-rose-500' : isComplete ? 'bg-emerald-500' : 'bg-electric-blue'}
+              ${isError ? 'bg-rose-500' : isComplete ? 'bg-emerald-500' : 'bg-electric-blue/50'}
             `}
             style={{ width: `${progress}%` }}
           />

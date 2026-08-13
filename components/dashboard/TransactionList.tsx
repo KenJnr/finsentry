@@ -49,7 +49,7 @@ export function TransactionList() {
         .select('*')
         .eq('user_id', session.user.id)
         .order('date', { ascending: false })
-        .limit(100) // Fetch more to have enough for filtering
+        .limit(100)
 
       if (fetchError) {
         throw new Error(fetchError.message)
@@ -94,12 +94,10 @@ export function TransactionList() {
   const categories = useMemo(() => {
     const unique = new Set<string>()
     
-    // Add categories from transactions
     transactions.forEach(t => {
       if (t.category) unique.add(t.category)
     })
     
-    // Add all categories from database
     allCategories.forEach(cat => {
       if (cat) unique.add(cat)
     })
@@ -154,7 +152,6 @@ export function TransactionList() {
   }
 
   const handleViewAll = () => {
-    // Navigate to insights page with transactions tab active
     router.push('/insights?tab=transactions')
   }
 
@@ -310,7 +307,7 @@ export function TransactionList() {
                 return (
                   <tr 
                     key={t.id} 
-                    className="hover:bg-gray-100/70 transition-colors duration-150 cursor-pointer"
+                    className="hover:bg-gray-100/70 dark:hover:bg-white/10 transition-colors duration-150 cursor-pointer"
                   >
                     <td className="px-3 sm:px-4 py-2.5 text-xs sm:text-sm text-gray-500 whitespace-nowrap">
                       {new Date(t.date).toLocaleDateString('en-US', { 
@@ -365,7 +362,7 @@ export function TransactionList() {
           {filteredTransactions.length > 15 && (
             <button 
               onClick={handleViewAll}
-              className="text-electric-blue hover:text-electric-blue/80 font-medium transition-colors text-sm"
+              className="text-electric-blue  hover:text-electric-blue/80 dark:hover:text-electric-blue/60 transition-colors text-sm"
             >
               View All →
             </button>

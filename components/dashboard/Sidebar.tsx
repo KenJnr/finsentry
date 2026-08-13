@@ -22,6 +22,8 @@ import {
   FileSpreadsheet,
   HelpCircle,
   AlertTriangle,
+  Sun,
+  Moon,
 } from 'lucide-react'
 import { supabase } from '@/lib/supabase'
 
@@ -37,12 +39,22 @@ export function Sidebar({ isMobile = false, onMobileClose }: SidebarProps) {
   const [isUserMenuOpen, setIsUserMenuOpen] = useState(false)
   const [isMobileOpen, setIsMobileOpen] = useState(false)
   const [user, setUser] = useState<any>(null)
+  const [isDarkMode, setIsDarkMode] = useState(false)
 
-  // Load collapsed state from localStorage
+  // Load collapsed state and theme from localStorage
   useEffect(() => {
     const saved = localStorage.getItem('sidebar-collapsed')
     if (saved !== null) {
       setIsCollapsed(JSON.parse(saved))
+    }
+
+    // Load theme preference
+    const savedTheme = localStorage.getItem('theme')
+    if (savedTheme === 'dark') {
+      setIsDarkMode(true)
+      document.documentElement.classList.add('dark')
+    } else {
+      document.documentElement.classList.remove('dark')
     }
 
     // Load user
@@ -73,6 +85,17 @@ export function Sidebar({ isMobile = false, onMobileClose }: SidebarProps) {
     }
   }
 
+  const toggleTheme = () => {
+    const newTheme = !isDarkMode
+    setIsDarkMode(newTheme)
+    localStorage.setItem('theme', newTheme ? 'dark' : 'light')
+    if (newTheme) {
+      document.documentElement.classList.add('dark')
+    } else {
+      document.documentElement.classList.remove('dark')
+    }
+  }
+
   const navItems = [
     { icon: Home, label: 'Dashboard', href: '/dashboard' },
     { icon: Upload, label: 'Upload', href: '/upload' },
@@ -91,9 +114,9 @@ export function Sidebar({ isMobile = false, onMobileClose }: SidebarProps) {
         {/* Mobile Toggle Button */}
         <button
           onClick={() => setIsMobileOpen(true)}
-          className="fixed top-4 left-4 z-50 p-2 rounded-lg bg-white shadow-card lg:hidden"
+          className="fixed top-4 left-4 z-50 p-2 rounded-lg bg-white shadow-card lg:hidden dark:bg-[#1A2A3A] dark:border dark:border-gray-700"
         >
-          <Menu className="w-5 h-5 sm:w-6 sm:h-6 text-navy" />
+          <Menu className="w-5 h-5 sm:w-6 sm:h-6 text-[#1A2A3A] dark:text-white" />
         </button>
 
         {/* Mobile Overlay */}
@@ -104,23 +127,23 @@ export function Sidebar({ isMobile = false, onMobileClose }: SidebarProps) {
           />
         )}
 
-        {/* Mobile Sidebar */}
+        {/* Mobile Sidebar - Navy background with white text */}
         <div
-          className={`fixed top-0 left-0 h-full bg-navy text-white z-50 transition-transform duration-300 ${
+          className={`fixed top-0 left-0 h-full bg-[#1A2A3A] text-white z-50 transition-transform duration-300 ${
             isMobileOpen ? 'translate-x-0' : '-translate-x-full'
           } w-72 sm:w-80 overflow-y-auto custom-scrollbar`}
         >
           <div className="flex flex-col h-full p-4">
-            {/* Header */}
+            {/* Header - White text */}
             <div className="flex items-center justify-between mb-8">
               <div className="flex items-center gap-3">
-                <span className="font-bold text-lg sm:text-xl text-orange-500">FinSentry</span>
+                <span className="font-bold text-lg sm:text-xl text-white">FinSentry</span>
               </div>
               <button
                 onClick={() => setIsMobileOpen(false)}
                 className="p-1 hover:bg-white/10 rounded-lg transition-colors"
               >
-                <X className="w-5 h-5 sm:w-6 sm:h-6" />
+                <X className="w-5 h-5 sm:w-6 sm:h-6 text-white" />
               </button>
             </div>
 
@@ -135,8 +158,8 @@ export function Sidebar({ isMobile = false, onMobileClose }: SidebarProps) {
                     onClick={() => setIsMobileOpen(false)}
                     className={`flex items-center gap-3 px-4 py-3 rounded-lg transition-all duration-200 ${
                       isActive
-                        ? 'bg-electric-blue text-white shadow-lg'
-                        : 'hover:bg-white/10'
+                        ? 'bg-[#3B82F6] text-white shadow-lg'
+                        : 'text-white hover:bg-white/10'
                     }`}
                   >
                     <item.icon className="w-5 h-5 sm:w-6 sm:h-6" />
@@ -148,10 +171,23 @@ export function Sidebar({ isMobile = false, onMobileClose }: SidebarProps) {
 
             {/* Bottom */}
             <div className="border-t border-white/10 pt-4 space-y-2">
+              {/* Theme Toggle */}
+              <button
+                onClick={toggleTheme}
+                className="w-full flex items-center gap-3 px-4 py-3 rounded-lg hover:bg-white/10 transition-colors text-sm sm:text-base text-white"
+              >
+                {isDarkMode ? (
+                  <Sun className="w-5 h-5 sm:w-6 sm:h-6 text-yellow-400" />
+                ) : (
+                  <Moon className="w-5 h-5 sm:w-6 sm:h-6 text-white" />
+                )}
+                {isDarkMode ? 'Light Mode' : 'Dark Mode'}
+              </button>
+
               <Link
                 href="/settings"
                 onClick={() => setIsMobileOpen(false)}
-                className="w-full flex items-center gap-3 px-4 py-3 rounded-lg hover:bg-white/10 transition-colors text-sm sm:text-base"
+                className="w-full flex items-center gap-3 px-4 py-3 rounded-lg hover:bg-white/10 transition-colors text-sm sm:text-base text-white"
               >
                 <Settings className="w-5 h-5 sm:w-6 sm:h-6" />
                 Settings
@@ -163,10 +199,10 @@ export function Sidebar({ isMobile = false, onMobileClose }: SidebarProps) {
     )
   }
 
-  // Desktop sidebar
+  // Desktop sidebar - Navy background with white text
   return (
     <div
-      className={`fixed left-0 top-0 h-full bg-navy text-white transition-all duration-300 z-40 ${
+      className={`fixed left-0 top-0 h-full bg-[#1A2A3A] text-white transition-all duration-300 z-40 ${
         isCollapsed ? 'w-[72px]' : 'w-[240px]'
       } shadow-card-dark`}
     >
@@ -175,17 +211,17 @@ export function Sidebar({ isMobile = false, onMobileClose }: SidebarProps) {
         <div className="flex items-center justify-between px-3 h-16 border-b border-white/10">
           {!isCollapsed && (
             <div className="flex items-center gap-2 overflow-hidden">
-              <span className="font-bold text-base whitespace-nowrap text-orange-500 animate-fade-in">
+              <span className="font-bold text-base whitespace-nowrap text-white animate-fade-in">
                 FinSentry
               </span>
             </div>
           )}
           {isCollapsed && (
-            <span className="text-xl mx-auto text-orange-500">FS</span>
+            <span className="text-xl mx-auto text-white">FS</span>
           )}
           <button
             onClick={toggleSidebar}
-            className="p-1.5 hover:bg-white/10 rounded-lg transition-colors flex-shrink-0"
+            className="p-1.5 hover:bg-white/10 rounded-lg transition-colors flex-shrink-0 text-white"
           >
             {isCollapsed ? (
               <ChevronRight className="w-4 h-4" />
@@ -205,19 +241,19 @@ export function Sidebar({ isMobile = false, onMobileClose }: SidebarProps) {
                 href={item.href}
                 className={`flex items-center gap-3 px-3 py-2.5 rounded-lg transition-all duration-200 group relative ${
                   isActive
-                    ? 'bg-electric-blue text-white shadow-lg'
-                    : 'hover:bg-white/10'
+                    ? 'bg-[#3B82F6] text-white shadow-lg'
+                    : 'text-white hover:bg-white/10'
                 }`}
                 title={isCollapsed ? item.label : undefined}
               >
                 <item.icon className="w-5 h-5 flex-shrink-0" />
                 {!isCollapsed && (
-                  <span className="text-sm whitespace-nowrap animate-fade-in">
+                  <span className="text-sm whitespace-nowrap animate-fade-in text-white">
                     {item.label}
                   </span>
                 )}
                 {isCollapsed && (
-                  <div className="absolute left-full ml-2 px-2 py-1 bg-navy text-white text-xs rounded opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap pointer-events-none z-50">
+                  <div className="absolute left-full ml-2 px-2 py-1 bg-[#1A2A3A] text-white text-xs rounded opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap pointer-events-none z-50">
                     {item.label}
                   </div>
                 )}
@@ -226,24 +262,49 @@ export function Sidebar({ isMobile = false, onMobileClose }: SidebarProps) {
           })}
         </nav>
 
-        {/* Bottom Actions - Updated with Settings */}
+        {/* Bottom Actions */}
         <div className="border-t border-white/10 px-2 py-4 space-y-1">
-          {/* Settings - Replaces notifications, help, and user */}
+          {/* Theme Toggle */}
+          <button
+            onClick={toggleTheme}
+            className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg hover:bg-white/10 transition-colors text-white ${
+              isCollapsed ? 'justify-center' : ''
+            }`}
+            title={isCollapsed ? (isDarkMode ? 'Dark Mode' : 'Light Mode') : undefined}
+          >
+            {isDarkMode ? (
+              <Moon className="w-5 h-5 flex-shrink-0 text-white" />
+            ) : (
+              <Sun className="w-5 h-5 flex-shrink-0 text-yellow-400" />
+            )}
+            {!isCollapsed && (
+              <span className="text-sm flex-1 text-left animate-fade-in text-white">
+                {isDarkMode ? 'Dark Mode' : 'Light Mode'}
+              </span>
+            )}
+            {isCollapsed && (
+              <div className="absolute left-full ml-2 px-2 py-1 bg-[#1A2A3A] text-white text-xs rounded opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap pointer-events-none z-50">
+                {isDarkMode ? 'Dark Mode' : 'Light Mode'}
+              </div>
+            )}
+          </button>
+
+          {/* Settings */}
           <Link
             href="/settings"
-            className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg hover:bg-white/10 transition-colors ${
+            className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg hover:bg-white/10 transition-colors text-white ${
               isCollapsed ? 'justify-center' : ''
             }`}
             title={isCollapsed ? 'Settings' : undefined}
           >
             <Settings className="w-5 h-5 flex-shrink-0" />
             {!isCollapsed && (
-              <span className="text-sm flex-1 text-left animate-fade-in">
+              <span className="text-sm flex-1 text-left animate-fade-in text-white">
                 Settings
               </span>
             )}
             {isCollapsed && (
-              <div className="absolute left-full ml-2 px-2 py-1 bg-navy text-white text-xs rounded opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap pointer-events-none z-50">
+              <div className="absolute left-full ml-2 px-2 py-1 bg-[#1A2A3A] text-white text-xs rounded opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap pointer-events-none z-50">
                 Settings
               </div>
             )}

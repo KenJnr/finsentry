@@ -81,7 +81,6 @@ export function UploadHistory({
         return
       }
 
-      // First, get the file_url to delete from storage
       const { data: uploadData, error: fetchError } = await supabase
         .from('uploads')
         .select('file_url, file_name')
@@ -91,7 +90,6 @@ export function UploadHistory({
 
       if (fetchError) throw fetchError
 
-      // Delete transactions associated with this upload
       const { error: txError } = await supabase
         .from('transactions')
         .delete()
@@ -100,10 +98,8 @@ export function UploadHistory({
 
       if (txError) {
         console.error('Error deleting transactions:', txError)
-        // Continue anyway - try to delete the upload record
       }
 
-      // Delete the upload record
       const { error: deleteError } = await supabase
         .from('uploads')
         .delete()
@@ -112,7 +108,6 @@ export function UploadHistory({
 
       if (deleteError) throw deleteError
 
-      // Try to delete the file from storage
       if (uploadData?.file_url) {
         try {
           const filePath = uploadData.file_url.split('/statements/')[1]
@@ -123,11 +118,9 @@ export function UploadHistory({
           }
         } catch (storageError) {
           console.error('Error deleting file from storage:', storageError)
-          // Don't throw - the record is already deleted
         }
       }
 
-      // Call the onDelete callback if provided
       if (onDelete) {
         onDelete(id)
       } else if (onRefresh) {
@@ -155,7 +148,6 @@ export function UploadHistory({
         return
       }
 
-      // Get all uploads for this user
       const { data: uploads, error: fetchError } = await supabase
         .from('uploads')
         .select('id, file_url, file_name')
@@ -163,7 +155,6 @@ export function UploadHistory({
 
       if (fetchError) throw fetchError
 
-      // Delete all transactions for this user
       const { error: txError } = await supabase
         .from('transactions')
         .delete()
@@ -171,10 +162,8 @@ export function UploadHistory({
 
       if (txError) {
         console.error('Error deleting all transactions:', txError)
-        // Continue anyway
       }
 
-      // Delete all upload records
       const { error: deleteError } = await supabase
         .from('uploads')
         .delete()
@@ -182,7 +171,6 @@ export function UploadHistory({
 
       if (deleteError) throw deleteError
 
-      // Try to delete all files from storage
       if (uploads && uploads.length > 0) {
         const filePaths = uploads
           .map(u => {
@@ -204,7 +192,6 @@ export function UploadHistory({
         }
       }
 
-      // Call the onDeleteAll callback if provided
       if (onDeleteAll) {
         onDeleteAll()
       } else if (onRefresh) {
